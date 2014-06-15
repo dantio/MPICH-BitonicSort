@@ -9,9 +9,10 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <stdlib.h>
-#include <wchar.h>
+#include <string.h>
 
 #define MAX_LINE_SIZE 652 // 652 / 4 = 163
+#define TOKENS 75
 
 // see http://www.mediabistro.com/alltwitter/files/2010/04/twitter_know_your_limits.png
 #define MAX_TWEET_TEXT 140
@@ -25,31 +26,53 @@
 #define U_MAX_BYTES 4
 static unsigned short mask[] = {192, 224, 240}; 
 
-typedef struct  {
-  unsigned int size; // Anzahl der Woerter im Dict
-
-  char *tokens[];
-} Dictionary; 	
-
-typedef struct {
+typedef struct Token {
    unsigned int id;   // Token id, unique & inc
-   char token[MAX_TWEET_TEXT * U_MAX_BYTES]; // der eigentliche token (komprimieren?)
+   char value[MAX_TWEET_TEXT * U_MAX_BYTES]; // der eigentliche token (komprimieren?)
    unsigned int length; // Token laenge
 } Token;
 
-typedef struct {
+
+typedef struct Dictionary{
+  unsigned int size; // Anzahl der Woerter im Dict
+  const Token * (*put)(struct Dictionary *, char *);    
+  Token *tokens[];
+} Dictionary; 	
+
+typedef struct Tweet {
   unsigned int line; // Zeilennummer/ ID in der Twitter Datei
   unsigned int date; // Datum, tagesgenau
   unsigned int length; // Tweet laenge
+  unsigned int size; // Anzahl der Tokens
   int rank; // Rang on Prozessoer der diesen Tweet ausgewertet hat
   char createdBy[MAX_USER_NAME]; // Erstellt von   
 
-  unsigned int *tokens[]; // Zeiger auf tokens id  
+  void (*addToken)(struct Tweet *, const Token *);   
+  Token *tokens[TOKENS]; // Zeiger auf tokens id  
 } Tweet;
 
 
 // Alle tweets im Chunk von Prozessor	
 Tweet *tweets;
+
+// Dict funktionen
+const Token * put(Dictionary *self, char *token) {
+	Token *dtoken = malloc(sizeof(Token));
+	strcpy(&dtoken->value, token);
+	dtoken->length = strlen(token);
+	
+	return dtoken;
+}
+
+// Tweet funktionen
+void addToken(Tweet *self, const Token * token){
+    if(self->size + 1 > TOKENS) {
+       printf("Too much tokens.\n");
+    		return;
+    }
+    self->tokens[self->size] = token;
+    self->size++;
+}
 
 // Woerterbuch
 Dictionary dict;
@@ -59,26 +82,30 @@ unsigned int lineOffset = 0;
  * UTF-8. Return length of the UTF-8 Character.
  */
 int u_getc(char *chunk, int offset, char *bytes) {
-    // Ist Char ein UTF-8 zeichen?
     int i = 1;
-    if ((chunk[offset] & mask[0]) == mask[0]) i++;
+    if ((chunk[offset] & mask[0]) == mask[0]) i++; // Ist Char ein UTF-8 zeichen?
     if ((chunk[offset] & mask[1]) == mask[1]) i++;
     if ((chunk[offset] & mask[2]) == mask[2]) i++;
 
-    // Zeichen einlesen
-    for(int j = 0; j < i; bytes[j] = chunk[offset + j++]); 
-
-    // Letztes Byte null setzten
-    bytes[i] = '\0';
+    for(int j = 0; j < i; bytes[j] = chunk[offset + j++]); // Zeichen einlesen    
+    bytes[i] = '\0'; // Letztes Byte null setzten
 
     return i;
 }
 
 
-/** Tokenize text */
-void tokenizer(char tweetText[], unsigned lenght, Tweet *tweet) {
-	printf("Rank: %d;Line: %d; Length: %d; Text: \"%s\" \n",tweet->rank, tweet->line, tweet->length, tweetText);
+/** 
+ * Tokenize text 
+ */
+void tokenizer(char *tweetText, unsigned lenght, Tweet *tweet) {
+	// printf("Rank: %d;Line: %d; Length: %d; Text: \"%s\" \n",tweet->rank, tweet->line, tweet->length, tweetText);
+
+   for(char *tokenStr = strtok(tweetText, " ");
+       tokenStr != NULL;
+       tweet->addToken(tweet, dict.put(&dict, tokenStr)),
+       tokenStr = strtok(NULL, " "));
 }
+
 /** 
  * Tweet Beispiel:
  * {"text":"untung mbah pulang jadinya bisatanya","created_at":"Thu Feb 06 09:25:44 +0000 2014"}	
@@ -86,12 +113,15 @@ void tokenizer(char tweetText[], unsigned lenght, Tweet *tweet) {
  * Diese Funktion parst von Beispiel Datei die so aussieht:
  * "0 2 Mar 08 @w0nderlxss No Hi's Mine"
  */
-void parseTweet(char tweetData[], unsigned int line, short int length, const int rank) {
+void parseTweet(char *tweetData, unsigned int line, short int length, const int rank) {
   
+  // Replace this with newTweet()
   Tweet *tweet = malloc(sizeof(Tweet));
   tweet->line = line;
   tweet->length = length;
-  tweet->rank = rank;
+  tweet->rank = rank;	 
+  tweet->size = 0;
+  tweet->addToken = addToken;
 
   int pos = 0; // position von whitespace
 
@@ -108,10 +138,10 @@ void parseTweet(char tweetData[], unsigned int line, short int length, const int
           case 3: break; // Tag
           case 4: // Tokenizer 
               tokenizer(tweetData + i , length, tweet);
-	      return;
+	          return;
           break;
         }
-  }
+  }  
 }
 
 void exec(MPI_File *in, const int rank, const int size, const int overlap) {
@@ -197,8 +227,6 @@ void exec(MPI_File *in, const int rank, const int size, const int overlap) {
       
       // Addiere die Laenge des UTF-8 chars
       i += charLen;
- 
-     // if(c[charLen -1] == 'y') printf("ok");
 
       // Kopiere UTF-8 Zeichen so lange bis Zeichen zu ende ist
       if(c[charLen - 1] != '\n' && i + 1 < locend) while(*cp) tweet[j++] = *cp++;  	
@@ -250,6 +278,9 @@ int main(int argc, char** argv) {
         MPI_Finalize();
 	return EXIT_FAILURE;
   }
+	
+  // Init
+  dict.put = put;
 
 
   exec(&fh, rank, size, MAX_LINE_SIZE);
