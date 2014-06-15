@@ -12,7 +12,8 @@
 #include <string.h>
 
 #define MAX_LINE_SIZE 652 // 652 / 4 = 163
-#define TOKENS 75
+#define TOKENS 75 // Max tokens in einem Tweet
+#define ENTRIES 500 // Max eintraege im Dictionary
 
 // see http://www.mediabistro.com/alltwitter/files/2010/04/twitter_know_your_limits.png
 #define MAX_TWEET_TEXT 140
@@ -27,16 +28,16 @@
 static unsigned short mask[] = {192, 224, 240}; 
 
 typedef struct Token {
-   unsigned int id;   // Token id, unique & inc
    char value[MAX_TWEET_TEXT * U_MAX_BYTES]; // der eigentliche token (komprimieren?)
    unsigned int length; // Token laenge
+   unsigned int used; // Anzahl wie oft das Token benutzt wird
 } Token;
 
 
 typedef struct Dictionary{
   unsigned int size; // Anzahl der Woerter im Dict
   const Token * (*put)(struct Dictionary *, char *);    
-  Token *tokens[];
+  Token *tokens[ENTRIES];
 } Dictionary; 	
 
 typedef struct Tweet {
@@ -53,15 +54,54 @@ typedef struct Tweet {
 
 
 // Alle tweets im Chunk von Prozessor	
-Tweet *tweets;
+Tweet *tweets[500];
 
 // Dict funktionen
-const Token * put(Dictionary *self, char *token) {
-	Token *dtoken = malloc(sizeof(Token));
-	strcpy(&dtoken->value, token);
-	dtoken->length = strlen(token);
+// Woerterbuch
+Dictionary dict;
+const Token * put(Dictionary *self, char *value) {
+	if(self->size + 1 > ENTRIES){
+		printf("Use realloc here\n");
+		return;
+	}
 	
-	return dtoken;
+    // 1. suche nach den gleichen String
+    unsigned int length = strlen(value); 
+    if(self->size > 0){
+      for(int i = 0; i < self->size;i++){
+      	Token * comT = self->tokens[i];
+      	if(comT->length != length && strncmp(comT->value, value, length) != 0)
+      	  continue;
+      	else {// Gleicher Token gefunden!
+      	  comT->used++;
+      	  return comT;
+      	}  
+      }
+    }
+    // 2. Kein gleicher Token, erstelle einen neuen
+	Token *newToken = malloc(sizeof(Token));
+	strcpy(&newToken->value, value);
+	newToken->length = length;
+	newToken->used = 1;
+	
+	self->tokens[self->size] = newToken; 
+	self->size++;
+	
+	return newToken;
+}
+
+void printDict(Dictionary * dict) {
+	if(dict == NULL) return;
+	
+	printf("Size: %d; Tokens:\n", dict->size);
+	if(dict->size > 0){
+	  Token * t;
+	  for(int i = 0; i < dict->size; i++){
+	  	t = dict->tokens[i];
+	  	printf("Used: %d; Value: \"%s\" \n", t->used, t->value);
+	  }
+	}
+
 }
 
 // Tweet funktionen
@@ -74,8 +114,22 @@ void addToken(Tweet *self, const Token * token){
     self->size++;
 }
 
-// Woerterbuch
-Dictionary dict;
+
+void printTweet(Tweet * tweet){
+	if(tweet == NULL) return;
+	
+	printf("Line: %d; Rank: %d; Tweet: {\"", tweet->line, tweet->rank);
+	if(tweet->size > 0){
+	  Token * t;
+	  for(int i = 0; i < tweet->size; i++){
+	  	t = tweet->tokens[i];
+	  	printf("%s ", t->value);
+	  }
+	  printf("\"} \n");
+	}
+}
+
+
 
 unsigned int lineOffset = 0;
 /**
@@ -98,8 +152,6 @@ int u_getc(char *chunk, int offset, char *bytes) {
  * Tokenize text 
  */
 void tokenizer(char *tweetText, unsigned lenght, Tweet *tweet) {
-	// printf("Rank: %d;Line: %d; Length: %d; Text: \"%s\" \n",tweet->rank, tweet->line, tweet->length, tweetText);
-
    for(char *tokenStr = strtok(tweetText, " ");
        tokenStr != NULL;
        tweet->addToken(tweet, dict.put(&dict, tokenStr)),
@@ -138,6 +190,7 @@ void parseTweet(char *tweetData, unsigned int line, short int length, const int 
           case 3: break; // Tag
           case 4: // Tokenizer 
               tokenizer(tweetData + i , length, tweet);
+              printTweet(tweet);
 	          return;
           break;
         }
@@ -233,18 +286,23 @@ void exec(MPI_File *in, const int rank, const int size, const int overlap) {
       
       // Zeile ist zu ende
       else {
-	tweet[j] = '\0';
-	parseTweet(tweet, lineNum, j, rank);
-	j = 0; 	
-	lineNum++;
+	    tweet[j] = '\0';
+	    parseTweet(tweet, lineNum, j, rank);
+	    j = 0; 	
+	    lineNum++;
 	//if(thread1 != NULL) pthread_join(thread1, NULL);
         //pthread_create(&thread1, NULL, (void *) &parseTweet, (char *) &tweet);
       }
    }
    
+
+   
    // Zeilennummer austauschen
    if(rank != lastProc) MPI_Send(&lineNum, 1, MPI_UNSIGNED, rank + 1, 0 /* TAG */, MPI_COMM_WORLD);
    if(rank != 0) MPI_Recv(&lineOffset, 1, MPI_UNSIGNED, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+   
+   
+   printDict(&dict);
 }
 
 
@@ -279,8 +337,9 @@ int main(int argc, char** argv) {
 	return EXIT_FAILURE;
   }
 	
-  // Init
+  // Replace this with newDict
   dict.put = put;
+  dict.size = 0;
 
 
   exec(&fh, rank, size, MAX_LINE_SIZE);
@@ -289,8 +348,8 @@ int main(int argc, char** argv) {
   
 
   // Print off a hello world message
-  printf("Hello world from processor %s, rank %d out of %d processors\n",
-         processor_name, rank, size);
+//  printf("Hello world from processor %s, rank %d out of %d processors\n",
+  //       processor_name, rank, size);
   
   // Finalize the MPI environment. No more MPI calls can be made after this
   MPI_Finalize();
