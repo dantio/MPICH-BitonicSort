@@ -27,7 +27,7 @@ unsigned int lineOffset = 0;
 /**
  * UTF-8. Return length of the UTF-8 Character.
  */
-int u_getc(char *chunk, int offset, char *bytes) {
+int u_getc(char chunk[], unsigned int offset, char bytes[]) {
     int i = 1;
     if ((chunk[offset] & mask[0]) == mask[0]) i++; // Ist Char ein UTF-8 zeichen?
     if ((chunk[offset] & mask[1]) == mask[1]) i++;
@@ -97,10 +97,11 @@ void exec(MPI_File* in, const int rank, const int size, const int overlap) {
     unsigned int j = 0;
     unsigned int lineNum = 0;
     char c[U_MAX_BYTES];
+    
     // Hier koennte openMP stehen
     for (unsigned int i = locstart; i <= locend;) {
         char* cp = &c;
-        unsigned int charLen = u_getc(chunk, i, &c);
+        unsigned int charLen = u_getc(chunk, i, c);
         // Addiere die Laenge des UTF-8 chars
         i += charLen;
         // Kopiere UTF-8 Zeichen so lange bis Zeichen zu ende ist
@@ -118,6 +119,7 @@ void exec(MPI_File* in, const int rank, const int size, const int overlap) {
     // Zeilennummer austauschen
     if(rank != lastProc) MPI_Send(&lineNum, 1, MPI_UNSIGNED, rank + 1, 0 /* TAG */, MPI_COMM_WORLD);
     if(rank != 0) MPI_Recv(&lineOffset, 1, MPI_UNSIGNED, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    
     dict->printDict(dict);
 }
 

@@ -1,18 +1,20 @@
-EXECS=tweetonic
+NAME=tweetonic
 MPICC?=mpicc -std=c99 -Wall
+SRC=${NAME}.c Dictionary.c Tweet.c
+OUT=${NAME}.out
 NP=4
 
-all: ${EXECS}
+all: ${NAME}
 
-tweetonic: ${EXECS}.c
-	${MPICC} -o ${EXECS}.out ${EXECS}.c Dictionary.c Tweet.c
+tweetonic: ${NAME}.c
+	${MPICC} -o ${OUT} ${SRC}
 
 clean:
-	rm ${EXECS}.out
+	rm ${OUT}
 
 run: all
-	mpirun -np ${NP} ./${EXECS}.out
+	mpirun -np ${NP} ./${OUT}
 	
 style:
-	astyle --style=google --fill-empty-lines ./${EXECS}.c
+	astyle --style=google --fill-empty-lines ./${SRC}
 	

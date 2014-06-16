@@ -7,16 +7,10 @@
  
 #include "Dictionary.h"
 
-Dictionary* newDictionary(){
-    Dictionary* dict = malloc(sizeof(Dictionary));
-    // Assign methods
-    dict->put = put;
-    dict->printDict = printDict;
-    dict->size = 0;
-    
-    return dict;
-};
-
+/**
+ * Add new unique Token to Dictionary.
+ * Returns pointer to new or existing Token.
+ */ 
 const Token* put(Dictionary *self, char *value) {
     if(self->size + 1 > ENTRIES) {
         printf("Use realloc here\n");
@@ -29,21 +23,19 @@ const Token* put(Dictionary *self, char *value) {
             Token * comT = self->tokens[i];
             if(comT->length != length && strncmp(comT->value, value, length) != 0)
                 continue;
-            else {// Gleicher Token gefunden!
+            else {
+            // Gleicher Token gefunden!
                 comT->used++;
                 return comT;
             }
         }
     }
     // 2. Kein gleicher Token, erstelle einen neuen
-    Token* newToken = malloc(sizeof(Token));
-    newToken->value = malloc(sizeof(char) * length);
-    strcpy(newToken->value, value);
-    newToken->length = length;
-    newToken->used = 1;
-    self->tokens[self->size] = newToken;
+    Token* token = newToken(value);
+    
+    self->tokens[self->size] = token;
     self->size++;
-    return newToken;
+    return token;
 }
 
 void printDict(const Dictionary * dict) {
@@ -58,3 +50,32 @@ void printDict(const Dictionary * dict) {
         }
     }
 }
+
+Dictionary* newDictionary(){
+    Dictionary* dict = malloc(sizeof(Dictionary));
+    // Assign methods
+    dict->put = put;
+    dict->printDict = printDict;
+    
+    dict->size = 0;
+    
+    return dict;
+};
+
+void destroyDictionary(Dictionary *dict){
+  // Todo
+
+}
+
+Token* newToken(char* value){
+    unsigned int length = strlen(value);
+    Token* newToken = malloc(sizeof(Token));
+    newToken->value = malloc(sizeof(char) * length);
+    strcpy(newToken->value, value);
+    newToken->length = length;
+    newToken->used = 1;
+    
+    return newToken;
+}
+
+

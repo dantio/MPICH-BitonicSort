@@ -27,8 +27,6 @@ typedef struct Tweet {
 
 Tweet* newTweet();
 
-void addToken(Tweet *self, const Token * token);
-
 void tokenizer(Dictionary* dict, char* tweetText, unsigned lenght, Tweet* tweet);
 
 void parseTweet(Dictionary* dict, char* tweetData, unsigned int line, short int length, const int rank);

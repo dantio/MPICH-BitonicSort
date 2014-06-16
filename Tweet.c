@@ -7,14 +7,7 @@
 
 #include "Tweet.h"
 
-Tweet* newTweet(){
-    // Replace this with newTweet()
-    Tweet *tweet = malloc(sizeof(Tweet));
-    tweet->size = 0;
-    tweet->addToken = addToken;
-    
-    return tweet;
-}
+
 
 void addToken(Tweet* self, const Token* token) {
     if(self->size + 1 > TOKENS) {
@@ -85,4 +78,13 @@ void parseTweet(Dictionary* dict, char* tweetData, unsigned int line, short int 
             break;
         }
     }
+}
+
+Tweet* newTweet(){
+    // Replace this with newTweet()
+    Tweet *tweet = malloc(sizeof(Tweet));
+    tweet->size = 0;
+    tweet->addToken = addToken;
+    
+    return tweet;
 }

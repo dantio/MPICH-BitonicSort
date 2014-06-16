@@ -30,19 +30,17 @@ typedef struct Dictionary {
 #endif
 
 /**
- * Constructor: Returns new Dictionary
+ * Dictionary constructor: Returns new Dictionary
  */
 Dictionary* newDictionary();
 
-//void destroyDictionary(Dictionary *dict);
-
 /**
- * Add new unique Token to Dictionary.
- * Returns pointer to new or existing Token.
- */ 
-const Token* put(Dictionary *self, char *value);
-
-/**
- * Prints the Dictionary.
+ * Dictionary deconstructor: delete dictionary and every Token
  */
-void printDict(const Dictionary * dict);
+void destroyDictionary(Dictionary *dict);
+
+/**
+ * Token constructor: Returns new Token
+ */
+Token* newToken(char* value);
+
