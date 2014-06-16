@@ -1,11 +1,12 @@
 /*
  ============================================================================
  Name        : Tweetonic.c
- Author      : Eric Wündisch, Daniil Tomilow
+ Author      : Daniil Tomilow
  ============================================================================
  */
+#include "Dictionary.h"
+ 
 #include <mpi.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -13,7 +14,7 @@
 
 #define MAX_LINE_SIZE 652 // 652 / 4 = 163
 #define TOKENS 75 // Max tokens in einem Tweet
-#define ENTRIES 500 // Max eintraege im Dictionary
+
 
 // see http://www.mediabistro.com/alltwitter/files/2010/04/twitter_know_your_limits.png
 #define MAX_TWEET_TEXT 140
@@ -27,19 +28,6 @@
 #define U_MAX_BYTES 4
 static unsigned short mask[] = {192, 224, 240};
 
-typedef struct Token {
-    char value[MAX_TWEET_TEXT * U_MAX_BYTES]; // der eigentliche token (komprimieren?)
-    unsigned int length; // Token laenge
-    unsigned int used; // Anzahl wie oft das Token benutzt wird
-} Token;
-
-
-typedef struct Dictionary {
-    unsigned int size; // Anzahl der Woerter im Dict
-    const Token * (*put)(struct Dictionary *, char *);
-    Token *tokens[ENTRIES];
-} Dictionary;
-
 typedef struct Tweet {
     unsigned int line; // Zeilennummer/ ID in der Twitter Datei
     unsigned int date; // Datum, tagesgenau
@@ -52,54 +40,6 @@ typedef struct Tweet {
     Token *tokens[TOKENS]; // Zeiger auf tokens id
 } Tweet;
 
-
-// Alle tweets im Chunk von Prozessor
-Tweet *tweets[500];
-
-// Dict funktionen
-// Woerterbuch
-Dictionary dict;
-const Token * put(Dictionary *self, char *value) {
-    if(self->size + 1 > ENTRIES) {
-        printf("Use realloc here\n");
-        return;
-    }
-    // 1. suche nach den gleichen String
-    unsigned int length = strlen(value);
-    if(self->size > 0) {
-        for(int i = 0; i < self->size; i++) {
-            Token * comT = self->tokens[i];
-            if(comT->length != length && strncmp(comT->value, value, length) != 0)
-                continue;
-            else {// Gleicher Token gefunden!
-                comT->used++;
-                return comT;
-            }
-        }
-    }
-    // 2. Kein gleicher Token, erstelle einen neuen
-    Token *newToken = malloc(sizeof(Token));
-    strcpy(&newToken->value, value);
-    newToken->length = length;
-    newToken->used = 1;
-    self->tokens[self->size] = newToken;
-    self->size++;
-    return newToken;
-}
-
-void printDict(Dictionary * dict) {
-    if(dict == NULL) return;
-    printf("Size: %d; Tokens:\n", dict->size);
-    if(dict->size > 0) {
-        Token * t;
-        for(int i = 0; i < dict->size; i++) {
-            t = dict->tokens[i];
-            if(t->used > 100)
-            printf("Used: %d; Value: \"%s\" \n", t->used, t->value);
-        }
-    }
-}
-
 // Tweet funktionen
 void addToken(Tweet *self, const Token * token) {
     if(self->size + 1 > TOKENS) {
@@ -109,7 +49,6 @@ void addToken(Tweet *self, const Token * token) {
     self->tokens[self->size] = token;
     self->size++;
 }
-
 
 void printTweet(Tweet * tweet) {
     if(tweet == NULL) return;
@@ -144,10 +83,10 @@ int u_getc(char *chunk, int offset, char *bytes) {
 /**
  * Tokenize text
  */
-void tokenizer(char *tweetText, unsigned lenght, Tweet *tweet) {
+void tokenizer(Dictionary* dict, char* tweetText, unsigned lenght, Tweet* tweet) {
     for(char *tokenStr = strtok(tweetText, " ");
             tokenStr != NULL;
-            tweet->addToken(tweet, dict.put(&dict, tokenStr)),
+            tweet->addToken(tweet, dict->put(dict, tokenStr)),
             tokenStr = strtok(NULL, " "));
 }
 
@@ -158,7 +97,7 @@ void tokenizer(char *tweetText, unsigned lenght, Tweet *tweet) {
  * Diese Funktion parst von Beispiel Datei die so aussieht:
  * "0 2 Mar 08 @w0nderlxss No Hi's Mine"
  */
-void parseTweet(char *tweetData, unsigned int line, short int length, const int rank) {
+void parseTweet(Dictionary* dict, char* tweetData, unsigned int line, short int length, const int rank) {
     // Replace this with newTweet()
     Tweet *tweet = malloc(sizeof(Tweet));
     tweet->line = line;
@@ -183,19 +122,20 @@ void parseTweet(char *tweetData, unsigned int line, short int length, const int 
         case 3:
             break; // Tag
         case 4: // Tokenizer
-            tokenizer(tweetData + i , length, tweet);
-            //printTweet(tweet);
+            tokenizer(dict, tweetData + i , length, tweet);
             return;
             break;
         }
     }
 }
 
-void exec(MPI_File *in, const int rank, const int size, const int overlap) {
+void exec(MPI_File* in, const int rank, const int size, const int overlap) {
+    Dictionary* dict = newDictionary();
+    
     MPI_Offset globalstart;
     int lastProc = size - 1; // Letzter Prozess
     int mysize;
-    char *chunk;
+    char* chunk;
     {
         MPI_Offset globalend;
         MPI_Offset filesize;
@@ -250,7 +190,7 @@ void exec(MPI_File *in, const int rank, const int size, const int overlap) {
     char c[U_MAX_BYTES];
     // Hier koennte openMP stehen
     for (unsigned int i = locstart; i <= locend;) {
-        char *cp = &c;
+        char* cp = &c;
         unsigned int charLen = u_getc(chunk, i, &c);
         // Addiere die Laenge des UTF-8 chars
         i += charLen;
@@ -259,7 +199,7 @@ void exec(MPI_File *in, const int rank, const int size, const int overlap) {
         // Zeile ist zu ende
         else {
             tweet[j] = '\0';
-            parseTweet(tweet, lineNum, j, rank);
+            parseTweet(dict, tweet, lineNum, j, rank);
             j = 0;
             lineNum++;
             //if(thread1 != NULL) pthread_join(thread1, NULL);
@@ -269,7 +209,7 @@ void exec(MPI_File *in, const int rank, const int size, const int overlap) {
     // Zeilennummer austauschen
     if(rank != lastProc) MPI_Send(&lineNum, 1, MPI_UNSIGNED, rank + 1, 0 /* TAG */, MPI_COMM_WORLD);
     if(rank != 0) MPI_Recv(&lineOffset, 1, MPI_UNSIGNED, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    printDict(&dict);
+    dict->printDict(dict);
 }
 
 
@@ -299,9 +239,7 @@ int main(int argc, char** argv) {
         MPI_Finalize();
         return EXIT_FAILURE;
     }
-    // Replace this with newDict
-    dict.put = put;
-    dict.size = 0;
+
     exec(&fh, rank, size, MAX_LINE_SIZE);
     MPI_File_close(&fh);
     // Print off a hello world message
