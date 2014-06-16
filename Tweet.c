@@ -55,7 +55,7 @@ void parseTweet(Dictionary* dict, char* tweetData, unsigned int line, short int 
     tweet->line = line;
     tweet->length = length;
     tweet->rank = rank;
-
+    
     int pos = 0; // position von whitespace
     for(int i = 0; i < length; i++) {
         if(tweetData[i] == ' ') {
@@ -80,7 +80,7 @@ void parseTweet(Dictionary* dict, char* tweetData, unsigned int line, short int 
     }
 }
 
-Tweet* newTweet(){
+Tweet* newTweet() {
     // Replace this with newTweet()
     Tweet *tweet = malloc(sizeof(Tweet));
     tweet->size = 0;

@@ -150,7 +150,7 @@ int main(int argc, char** argv) {
         MPI_Finalize();
         return EXIT_FAILURE;
     }
-
+    
     exec(&fh, rank, size, MAX_LINE_SIZE);
     MPI_File_close(&fh);
     // Print off a hello world message

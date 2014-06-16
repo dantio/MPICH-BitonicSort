@@ -4,13 +4,13 @@
  Author      : Daniil Tomilow
  ============================================================================
  */
- 
+
 #include "Dictionary.h"
 
 /**
  * Add new unique Token to Dictionary.
  * Returns pointer to new or existing Token.
- */ 
+ */
 const Token* put(Dictionary *self, char *value) {
     if(self->size + 1 > ENTRIES) {
         printf("Use realloc here\n");
@@ -24,7 +24,7 @@ const Token* put(Dictionary *self, char *value) {
             if(comT->length != length && strncmp(comT->value, value, length) != 0)
                 continue;
             else {
-            // Gleicher Token gefunden!
+                // Gleicher Token gefunden!
                 comT->used++;
                 return comT;
             }
@@ -46,12 +46,12 @@ void printDict(const Dictionary * dict) {
         for(int i = 0; i < dict->size; i++) {
             t = dict->tokens[i];
             if(t->used > 100)
-            printf("Used: %d; Value: \"%s\" \n", t->used, t->value);
+                printf("Used: %d; Value: \"%s\" \n", t->used, t->value);
         }
     }
 }
 
-Dictionary* newDictionary(){
+Dictionary* newDictionary() {
     Dictionary* dict = malloc(sizeof(Dictionary));
     // Assign methods
     dict->put = put;
@@ -62,12 +62,12 @@ Dictionary* newDictionary(){
     return dict;
 };
 
-void destroyDictionary(Dictionary *dict){
-  // Todo
-
+void destroyDictionary(Dictionary *dict) {
+    // Todo
+    
 }
 
-Token* newToken(char* value){
+Token* newToken(char* value) {
     unsigned int length = strlen(value);
     Token* newToken = malloc(sizeof(Token));
     newToken->value = malloc(sizeof(char) * length);
