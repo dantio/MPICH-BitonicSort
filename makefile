@@ -5,7 +5,7 @@ NP=4
 all: ${EXECS}
 
 tweetonic: ${EXECS}.c
-	${MPICC} -o ${EXECS}.out ${EXECS}.c Dictionary.c
+	${MPICC} -o ${EXECS}.out ${EXECS}.c Dictionary.c Tweet.c
 
 clean:
 	rm ${EXECS}.out

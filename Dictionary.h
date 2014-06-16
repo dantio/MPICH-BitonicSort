@@ -10,19 +10,24 @@
 
 #define ENTRIES 500 // Max eintraege im Dictionary
 
+#ifndef TOKEN
+#define TOKEN
 typedef struct Token {
     char* value; // der eigentliche token (komprimieren?)
     unsigned int length; // Token laenge
     unsigned int used; // Anzahl wie oft das Token benutzt wird
 } Token;
+#endif
 
-
+#ifndef DICT
+#define DICT
 typedef struct Dictionary {
     unsigned int size; // Anzahl der Woerter im Dict
     const Token* (*put)(struct Dictionary*, char*);
     void (*printDict)(const struct Dictionary*);
     Token* tokens[ENTRIES];
 } Dictionary;
+#endif
 
 /**
  * Constructor: Returns new Dictionary
@@ -41,4 +46,3 @@ const Token* put(Dictionary *self, char *value);
  * Prints the Dictionary.
  */
 void printDict(const Dictionary * dict);
-
