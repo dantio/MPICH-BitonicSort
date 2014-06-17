@@ -14,14 +14,14 @@ void addToken(Tweet* self, const Token* token) {
         printf("Too much tokens.\n");
         return;
     }
-    self->tokens[self->size] = token;
+   // self->tokens[self->size] = token;
     self->size++;
 }
 
-void printTweet(Tweet * tweet) {
+void printTweet(Tweet* tweet) {
     if(tweet == NULL) return;
     printf("Line: %d; Rank: %d; Tweet: {\"", tweet->line, tweet->rank);
-    if(tweet->size > 0) {
+    if(tweet->size < 0) {
         Token * t;
         for(int i = 0; i < tweet->size; i++) {
             t = tweet->tokens[i];
@@ -50,6 +50,7 @@ void tokenizer(Dictionary* dict, char* tweetText, unsigned lenght, Tweet* tweet)
  * "0 2 Mar 08 @w0nderlxss No Hi's Mine"
  */
 void parseTweet(Dictionary* dict, char* tweetData, unsigned int line, short int length, const int rank) {
+    printf("== start parseTweet: Rank = \"%d\"; Line =\"%d\"; length = \"%d\";", rank, line, length);
     Tweet* tweet = newTweet();
     
     tweet->line = line;
@@ -81,8 +82,7 @@ void parseTweet(Dictionary* dict, char* tweetData, unsigned int line, short int 
 }
 
 Tweet* newTweet() {
-    // Replace this with newTweet()
-    Tweet *tweet = malloc(sizeof(Tweet));
+    Tweet* tweet = malloc(sizeof(Tweet));
     tweet->size = 0;
     tweet->addToken = addToken;
     

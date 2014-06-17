@@ -25,6 +25,7 @@ typedef struct Dictionary {
     unsigned int size; // Anzahl der Woerter im Dict
     const Token* (*put)(struct Dictionary*, char*);
     void (*printDict)(const struct Dictionary*);
+    int rank; // Rank von prozessor
     Token* tokens[ENTRIES];
 } Dictionary;
 #endif
@@ -32,7 +33,7 @@ typedef struct Dictionary {
 /**
  * Dictionary constructor: Returns new Dictionary
  */
-Dictionary* newDictionary();
+Dictionary* newDictionary(const int rank);
 
 /**
  * Dictionary deconstructor: delete dictionary and every Token

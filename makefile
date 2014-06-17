@@ -13,7 +13,16 @@ clean:
 	rm ${OUT}
 
 run: all
-	mpirun -np ${NP} ./${OUT}
+	mpirun -np 2 ./${OUT}
+	
+run2: all
+	mpirun -np 4 ./${OUT}
+	
+run4: all
+	mpirun -np 8 ./${OUT}
+	
+run16: all
+	mpirun -np 16 ./${OUT}
 	
 style:
 	astyle --style=google --fill-empty-lines ./${SRC}

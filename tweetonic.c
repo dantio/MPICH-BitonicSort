@@ -39,7 +39,7 @@ int u_getc(char chunk[], unsigned int offset, char bytes[]) {
 
 
 void exec(MPI_File* in, const int rank, const int size, const int overlap) {
-    Dictionary* dict = newDictionary();
+    Dictionary* dict = newDictionary(rank);
     
     MPI_Offset globalstart;
     int lastProc = size - 1; // Letzter Prozess
@@ -64,6 +64,11 @@ void exec(MPI_File* in, const int rank, const int size, const int overlap) {
         mysize =  globalend - globalstart + 1;
         // Speicher alloziieren
         chunk = malloc((mysize + 1) * sizeof(char));
+        if(chunk == NULL){
+          printf("No more memory \n");
+          MPI_Finalize();
+          return;
+        }
         // Chunks einlesen
         MPI_File_read_at_all(
             *in,
@@ -78,8 +83,8 @@ void exec(MPI_File* in, const int rank, const int size, const int overlap) {
     // Suche den "richtigen" Start. (Weil es moeglich ist mitten in der Zeile
     // anzufangen oder aufzuhoeren).
     //
-    int locstart = 0; // Von
-    int locend = mysize - 1; // Bis
+    unsigned int locstart = 0; // Von
+    unsigned int locend = mysize - 1; // Bis
     // Rank 0 liest von anfang der Datei, der Start muss nicht gesucht werde
     if (rank != 0) {
         while(chunk[locstart] != '\n') locstart++;
@@ -112,15 +117,16 @@ void exec(MPI_File* in, const int rank, const int size, const int overlap) {
             parseTweet(dict, tweet, lineNum, j, rank);
             j = 0;
             lineNum++;
+            printTweet(tweet);
             //if(thread1 != NULL) pthread_join(thread1, NULL);
             //pthread_create(&thread1, NULL, (void *) &parseTweet, (char *) &tweet);
         }
     }
     // Zeilennummer austauschen
-    if(rank != lastProc) MPI_Send(&lineNum, 1, MPI_UNSIGNED, rank + 1, 0 /* TAG */, MPI_COMM_WORLD);
-    if(rank != 0) MPI_Recv(&lineOffset, 1, MPI_UNSIGNED, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+   // if(rank != lastProc) MPI_Send(&lineNum, 1, MPI_UNSIGNED, rank + 1, 0 /* TAG */, MPI_COMM_WORLD);
+    //if(rank != 0) MPI_Recv(&lineOffset, 1, MPI_UNSIGNED, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     
-    dict->printDict(dict);
+    //dict->printDict(dict);
 }
 
 
@@ -154,8 +160,8 @@ int main(int argc, char** argv) {
     exec(&fh, rank, size, MAX_LINE_SIZE);
     MPI_File_close(&fh);
     // Print off a hello world message
-//  printf("Hello world from processor %s, rank %d out of %d processors\n",
-    //       processor_name, rank, size);
+    printf("Hello world from processor %s, rank %d out of %d processors\n",
+           processor_name, rank, size);
     // Finalize the MPI environment. No more MPI calls can be made after this
     MPI_Finalize();
     return EXIT_SUCCESS;

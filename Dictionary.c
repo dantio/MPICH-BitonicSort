@@ -20,7 +20,7 @@ const Token* put(Dictionary *self, char *value) {
     unsigned int length = strlen(value);
     if(self->size > 0) {
         for(int i = 0; i < self->size; i++) {
-            Token * comT = self->tokens[i];
+            Token* comT = self->tokens[i];
             if(comT->length != length && strncmp(comT->value, value, length) != 0)
                 continue;
             else {
@@ -40,19 +40,24 @@ const Token* put(Dictionary *self, char *value) {
 
 void printDict(const Dictionary * dict) {
     if(dict == NULL) return;
-    printf("Size: %d; Tokens:\n", dict->size);
+    printf("== Rank: %d; Size: %d; Tokens:\n", dict->rank,  dict->size);
     if(dict->size > 0) {
         Token * t;
         for(int i = 0; i < dict->size; i++) {
             t = dict->tokens[i];
-            if(t->used > 100)
+           // if(t->used > 1)
                 printf("Used: %d; Value: \"%s\" \n", t->used, t->value);
         }
     }
 }
 
-Dictionary* newDictionary() {
+Dictionary* newDictionary(int rank) {
     Dictionary* dict = malloc(sizeof(Dictionary));
+    if(dict == NULL) {
+          printf("No more memory \n");
+          return NULL;
+    }
+    dict->rank = rank;
     // Assign methods
     dict->put = put;
     dict->printDict = printDict;
@@ -71,7 +76,7 @@ Token* newToken(char* value) {
     unsigned int length = strlen(value);
     Token* newToken = malloc(sizeof(Token));
     newToken->value = malloc(sizeof(char) * length);
-    strcpy(newToken->value, value);
+    strncpy(newToken->value, value, length);
     newToken->length = length;
     newToken->used = 1;
     
