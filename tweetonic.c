@@ -4,8 +4,6 @@
  Author      : Daniil Tomilow
  ============================================================================
  */
-#include "Dictionary.h"
-#include "Tweet.h"
 
 #include <mpi.h>
 #include <stdio.h>
@@ -13,7 +11,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MAX_LINE_SIZE 652 // 652 / 4 = 163
+
+// 1  +  1  +  N   + 1  +   3  +    1  +   2  +  1 +  140 * 3 + 1
+// 0  + ' ' + '10' + ' ' + 'MAR' + ' ' + '02' + ' '+ 'tweet' + '\n'
+#define MAX_LINE_SIZE 722  
+
+// #define TNUM 2400000 // Zeilen
+#define TSIZE 32
+#define TNUM 10 // Zeilen
+#define FIN "twitter.data10"
 
 // mask values for bit pattern of first byte in multi-byte
 // UTF-8 sequences:
@@ -21,9 +27,10 @@
 // 224 - 1110xxxx - for U+0800 to U+FFFF
 // 240 - 11110xxx - for U+010000 to U+1FFFFF
 #define U_MAX_BYTES 4
+char* MONTHS[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+int linesToRead;
 static unsigned short mask[] = {192, 224, 240};
 
-unsigned int lineOffset = 0;
 /**
  * UTF-8. Return length of the UTF-8 Character.
  */
@@ -37,104 +44,132 @@ int u_getc(char chunk[], unsigned int offset, char bytes[]) {
     return i;
 }
 
+void handle_error(const char* msg) {
+      fprintf(stderr, "Error: %s\n", msg);
+      exit(255);
+}
 
-void exec(MPI_File* in, const int rank, const int size, const int overlap) {
-    Dictionary* dict = newDictionary(rank);
+void printTweet(const char* t) {
+	printf("[");
+	int i;
+	for (i=0; i<TSIZE; i++) {
+		int k = t[i];
+		printf("%2x ", k<0 ? k+256 :k);
+	}
+	printf("]\n");
+}
+
+
+int readNumber(char** lptr) {
+  char* ptr = *lptr;
+  char* line = *lptr;
+  while (*ptr != ' ') ptr++;
+  *ptr = 0;
+  *lptr = ptr+1;
+  return atoi(line);
+}
+
+int readMonth(char** lptr) {
+	char* ptr = *lptr;
+	char* line = *lptr;
+	while (*ptr != ' ') ptr++;
+	*ptr = 0;
+	*lptr = ptr+1;
+	int i, m;
+	for (i=0, m=1; i<12; i++, m++)
+		if (strncmp(line, MONTHS[i], 3) == 0)
+			return m;
+	fprintf(stderr, "invalid month: %s\n", line);
+	exit(3);
+}
+
+int countHits(const char* line, const char* key) {
+  int n = strlen(key);
+  int k = strlen(line) - n;
+  int i;
+  int hits = 0;
+  for (i=0; i<k; i++, line++)
+	  if (*line == *key)
+		  if (strncmp(line, key, n) == 0)
+			  hits++;
+  return hits;
+}
+
+
+void writeTweet(char* TWEETS, char* tweet, const int fn, const int ln, const int hits,
+		const int month, const int day, char* line) {
+  short* ptr1 = (short*) tweet;
+  *ptr1 = (short) fn;
+   int* ptr2 = (int*) (tweet + 2);
+  *ptr2 = ln;
+  *(tweet+6) = (char) hits;
+  *(tweet+7) = (char) month;
+  *(tweet+8) = (char) day;
+  int i;
+  int n = TSIZE-9;
+  for (i=strlen(line); i<n; i++) line[i] = ' '; // padding
+  memcpy(tweet+9, line, n);
+
+}
+
+char isLastProc(const int rank, const int size){
+	return rank != 0 && rank == size -1;
+}
+
+void exec(const int rank, const int size, const char* key) {
+
+    FILE* file = fopen(FIN, "r");
+    if (file == NULL) handle_error("open");
+
     
-    MPI_Offset globalstart;
-    int lastProc = size - 1; // Letzter Prozess
-    int mysize;
-    char* chunk;
+    int BUFFER_SIZE = MAX_LINE_SIZE;   
+    linesToRead = TNUM / size;
+    int globalstart = rank * linesToRead;
+    int globalend   = globalstart + linesToRead;
+    
+    // Der letzter Prozessor
+    if (isLastProc(rank, size)){ 
+      globalend = TNUM; 
+      linesToRead = TNUM - linesToRead * (size -1) ;
+      };
+    
+    char TWEETS[linesToRead * TSIZE];
+    char buf[BUFFER_SIZE];
+    
+    int lines = 0;
+    char* tweet;
+    char* line;
+    for(tweet=TWEETS; (line = fgets(buf, BUFFER_SIZE, file)) != NULL; ++lines)
     {
-        MPI_Offset globalend;
-        MPI_Offset filesize;
-        // Datei groese ermitteln
-        MPI_File_get_size(*in, &filesize);
-        // Letztes null byte ignorieren
-        filesize--;
-        // Jeder Prozessor bekommt ein Teil der Datei
-        mysize = filesize / size;
-        globalstart = rank * mysize;
-        globalend   = globalstart + mysize - 1;
-        // Der letzter Prozessor
-        if (rank == lastProc) globalend = filesize - 1;
-        // Ueberlappen um keine halben Zeilen zu haben
-        // Beim letzten nicht, weil er bis zum Ende der Datei liest
-        if (rank != lastProc) globalend += overlap;
-        mysize =  globalend - globalstart + 1;
-        // Speicher alloziieren
-        chunk = malloc((mysize + 1) * sizeof(char));
-        if(chunk == NULL){
-          printf("No more memory \n");
-          MPI_Finalize();
-          return;
-        }
-        // Chunks einlesen
-        MPI_File_read_at_all(
-            *in,
-            globalstart,
-            chunk,
-            mysize,
-            MPI_CHAR,
-            MPI_STATUS_IGNORE);
-        chunk[mysize] = '\0';
+        if(lines < globalstart) continue;
+        if(lines > globalend + 1) break;
+        
+        int fn = readNumber(&line);
+    	int ln = readNumber(&line);
+   		int month = readMonth(&line);
+        int day = readNumber(&line);
+
+        int hits = countHits(line, key);
+        writeTweet(TWEETS, tweet, fn, ln, hits, month, day, line);  
+        printTweet(tweet);      
+        
+        tweet+=TSIZE;
     }
-    //
-    // Suche den "richtigen" Start. (Weil es moeglich ist mitten in der Zeile
-    // anzufangen oder aufzuhoeren).
-    //
-    unsigned int locstart = 0; // Von
-    unsigned int locend = mysize - 1; // Bis
-    // Rank 0 liest von anfang der Datei, der Start muss nicht gesucht werde
-    if (rank != 0) {
-        while(chunk[locstart] != '\n') locstart++;
-        locstart++;
-    }
-    // Der letzte liest einfach bis zum ende
-    if (rank != lastProc) {
-        locend -= overlap;
-        while(chunk[locend] != '\n') locend++;
-    }
-    mysize = locend - locstart + 1;
-    // Zeile lesen, parsen
-    // pthread_t thread1;
-    char tweet[MAX_LINE_SIZE];
-    unsigned int j = 0;
-    unsigned int lineNum = 0;
-    char c[U_MAX_BYTES];
     
-    // Hier koennte openMP stehen
-    for (unsigned int i = locstart; i <= locend;) {
-        char* cp = &c;
-        unsigned int charLen = u_getc(chunk, i, c);
-        // Addiere die Laenge des UTF-8 chars
-        i += charLen;
-        // Kopiere UTF-8 Zeichen so lange bis Zeichen zu ende ist
-        if(c[charLen - 1] != '\n' && i + 1 < locend) while(*cp) tweet[j++] = *cp++;
-        // Zeile ist zu ende
-        else {
-            tweet[j] = '\0';
-            parseTweet(dict, tweet, lineNum, j, rank);
-            j = 0;
-            lineNum++;
-            printTweet(tweet);
-            //if(thread1 != NULL) pthread_join(thread1, NULL);
-            //pthread_create(&thread1, NULL, (void *) &parseTweet, (char *) &tweet);
-        }
-    }
-    // Zeilennummer austauschen
-   // if(rank != lastProc) MPI_Send(&lineNum, 1, MPI_UNSIGNED, rank + 1, 0 /* TAG */, MPI_COMM_WORLD);
-    //if(rank != 0) MPI_Recv(&lineOffset, 1, MPI_UNSIGNED, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    
-    //dict->printDict(dict);
+    fclose(file);
 }
 
 
 
 int main(int argc, char** argv) {
+    if(argc != 2){
+      fprintf(stderr, "Please specify search key");
+      return EXIT_FAILURE;
+    }
+
     // Initialize MPI
     MPI_Init(NULL, NULL);
-    
+        
     // Get the number of processes
     int size;
     MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -142,23 +177,12 @@ int main(int argc, char** argv) {
     // Get the rank of the process
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    // Get the name of the processor
-    char processor_name[MPI_MAX_PROCESSOR_NAME];
+       
+    exec(rank, size, argv[1]);
+    
+    char processor_name[MPI_MAX_PROCESSOR_NAME]; // Get the name of the processor
     int name_len;
     MPI_Get_processor_name(processor_name, &name_len);
-    MPI_File fh;
-    if(MPI_SUCCESS != MPI_File_open(
-                MPI_COMM_WORLD,
-                "twitter.data10",
-                MPI_MODE_RDONLY,
-                MPI_INFO_NULL, &fh) ) {
-        fprintf(stderr, "Couldn't open file ");
-        MPI_Finalize();
-        return EXIT_FAILURE;
-    }
-    
-    exec(&fh, rank, size, MAX_LINE_SIZE);
-    MPI_File_close(&fh);
     // Print off a hello world message
     printf("Hello world from processor %s, rank %d out of %d processors\n",
            processor_name, rank, size);

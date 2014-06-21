@@ -1,6 +1,6 @@
 NAME=tweetonic
 MPICC?=mpicc -std=c99 -Wall
-SRC=${NAME}.c Dictionary.c Tweet.c
+SRC=${NAME}.c
 OUT=${NAME}.out
 NP=4
 
@@ -12,17 +12,20 @@ tweetonic: ${NAME}.c
 clean:
 	rm ${OUT}
 
-run: all
-	mpirun -np 2 ./${OUT}
+run1:
+	mpirun -np 1 ./${OUT} "app"
 	
-run2: all
-	mpirun -np 4 ./${OUT}
+run2: 
+	mpirun -np 2 ./${OUT} "app"
 	
-run4: all
-	mpirun -np 8 ./${OUT}
+run2: 
+	mpirun -np 4 ./${OUT} "app"
 	
-run16: all
-	mpirun -np 16 ./${OUT}
+run4: 
+	mpirun -np 8 ./${OUT} "app"
+	
+run16: 
+	mpirun -np 16 ./${OUT} "app"
 	
 style:
 	astyle --style=google --fill-empty-lines ./${SRC}
