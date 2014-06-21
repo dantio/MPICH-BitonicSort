@@ -23,6 +23,9 @@
 char* MONTHS[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 char TWEETS[TNUM*TSIZE];
 
+
+
+
 int readNumber(char** lptr) {
   char* ptr = *lptr;
   char* line = *lptr;
@@ -81,7 +84,6 @@ void writeTweet(char* tweet, const int fn, const int ln, const int hits,
   int n = TSIZE-9;
   for (i=strlen(line); i<n; i++) line[i] = ' '; // padding
   memcpy(tweet+9, line, n);
-//  printTweet(tweet); printf("\n");
 }
 
 void readTweets(const char* key) {

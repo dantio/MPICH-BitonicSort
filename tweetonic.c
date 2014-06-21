@@ -14,7 +14,7 @@
 
 // 1  +  1  +  N   + 1  +   3  +    1  +   2  +  1 +  140 * 3 + 1
 // 0  + ' ' + '10' + ' ' + 'MAR' + ' ' + '02' + ' '+ 'tweet' + '\n'
-#define MAX_LINE_SIZE 722  
+#define MAX_LINE_SIZE 722
 
 // #define TNUM 2400000 // Zeilen
 #define TSIZE 32
@@ -44,94 +44,143 @@ int u_getc(char chunk[], unsigned int offset, char bytes[]) {
     return i;
 }
 
-void handle_error(const char* msg) {
-      fprintf(stderr, "Error: %s\n", msg);
-      exit(255);
+void printTweet(const char* t, char* buffer) {
+    int i;
+    int n = 1;
+    buffer[0] = '[';
+    for (i=0; i < TSIZE; i++) {
+        int k = t[i];
+        int l = sprintf(buffer + n, "%2x ", k<0 ? k+256 :k);
+        n +=l;
+    }
+    buffer[n] = ']';
+    buffer[n+1] = '\n';
+    buffer[n+2] = '\0';
+    printf("%s", buffer);
 }
 
-void printTweet(const char* t) {
-	printf("[");
-	int i;
-	for (i=0; i<TSIZE; i++) {
-		int k = t[i];
-		printf("%2x ", k<0 ? k+256 :k);
-	}
-	printf("]\n");
+void writeOrderedTweets(char* TWEETS) {
+    char* tweet = TWEETS;
+    char buffer[linesToRead * TSIZE *3];
+    for (int i = 0; i < linesToRead; i++, tweet+=TSIZE) {
+        printTweet(tweet, buffer + i * TSIZE);
+    }
+    
+}
+
+void compare(char* tweet1, char* tweet2, int dir) {
+    for (int i = 6; i < TSIZE; i++) {
+        if (dir == (tweet1[i] > tweet2[i])) {
+            char* h = tweet1;
+            tweet1 = tweet2;
+            tweet2 = h;
+            printf("swap\n");
+            break;
+        }
+    }
+}
+
+void bitonicMerge(char* TWEETS, int lo, int cnt, int dir) {
+    if (cnt>1) {
+        int k= cnt / 2;
+        int i;
+        for (i = lo; i < lo + k; i++) compare(TWEETS + i, TWEETS + i + k, dir);
+        
+        bitonicMerge(TWEETS, lo, k, dir);
+        bitonicMerge(TWEETS, lo + k, k, dir);
+    }
+}
+
+void bitonicSort(char* TWEETS, int lo, int cnt, int dir) {
+    if (cnt > 1) {
+        int k = cnt / 2;
+        bitonicSort(TWEETS, lo, k, 1 /* ASCENDING */);
+        bitonicSort(TWEETS, lo + k, k, 0 /* DESCENDING */);
+        bitonicMerge(TWEETS, lo, cnt, dir);
+    }
+}
+
+
+void handle_error(const char* msg) {
+    fprintf(stderr, "Error: %s\n", msg);
+    exit(255);
 }
 
 
 int readNumber(char** lptr) {
-  char* ptr = *lptr;
-  char* line = *lptr;
-  while (*ptr != ' ') ptr++;
-  *ptr = 0;
-  *lptr = ptr+1;
-  return atoi(line);
+    char* ptr = *lptr;
+    char* line = *lptr;
+    while (*ptr != ' ') ptr++;
+    *ptr = 0;
+    *lptr = ptr+1;
+    return atoi(line);
 }
 
 int readMonth(char** lptr) {
-	char* ptr = *lptr;
-	char* line = *lptr;
-	while (*ptr != ' ') ptr++;
-	*ptr = 0;
-	*lptr = ptr+1;
-	int i, m;
-	for (i=0, m=1; i<12; i++, m++)
-		if (strncmp(line, MONTHS[i], 3) == 0)
-			return m;
-	fprintf(stderr, "invalid month: %s\n", line);
-	exit(3);
+    char* ptr = *lptr;
+    char* line = *lptr;
+    while (*ptr != ' ') ptr++;
+    *ptr = 0;
+    *lptr = ptr+1;
+    int i, m;
+    for (i=0, m=1; i<12; i++, m++)
+        if (strncmp(line, MONTHS[i], 3) == 0)
+            return m;
+    fprintf(stderr, "invalid month: %s\n", line);
+    exit(3);
 }
 
 int countHits(const char* line, const char* key) {
-  int n = strlen(key);
-  int k = strlen(line) - n;
-  int i;
-  int hits = 0;
-  for (i=0; i<k; i++, line++)
-	  if (*line == *key)
-		  if (strncmp(line, key, n) == 0)
-			  hits++;
-  return hits;
+    int n = strlen(key);
+    int k = strlen(line) - n;
+    int i;
+    int hits = 0;
+    for (i=0; i<k; i++, line++)
+        if (*line == *key)
+            if (strncmp(line, key, n) == 0)
+                hits++;
+    return hits;
 }
 
 
 void writeTweet(char* TWEETS, char* tweet, const int fn, const int ln, const int hits,
-		const int month, const int day, char* line) {
-  short* ptr1 = (short*) tweet;
-  *ptr1 = (short) fn;
-   int* ptr2 = (int*) (tweet + 2);
-  *ptr2 = ln;
-  *(tweet+6) = (char) hits;
-  *(tweet+7) = (char) month;
-  *(tweet+8) = (char) day;
-  int i;
-  int n = TSIZE-9;
-  for (i=strlen(line); i<n; i++) line[i] = ' '; // padding
-  memcpy(tweet+9, line, n);
-
+                const int month, const int day, char* line) {
+    short* ptr1 = (short*) tweet;
+    *ptr1 = (short) fn;
+    int* ptr2 = (int*) (tweet + 2);
+    *ptr2 = ln;
+    *(tweet+6) = (char) hits;
+    *(tweet+7) = (char) month;
+    *(tweet+8) = (char) day;
+    int i;
+    int n = TSIZE-9;
+    for (i=strlen(line); i<n; i++) line[i] = ' '; // padding
+    memcpy(tweet + 9, line, n);
+    
 }
 
-char isLastProc(const int rank, const int size){
-	return rank != 0 && rank == size -1;
+char isLastProc(const int rank, const int size) {
+    return rank != 0 && rank == size -1;
 }
 
 void exec(const int rank, const int size, const char* key) {
 
     FILE* file = fopen(FIN, "r");
     if (file == NULL) handle_error("open");
-
     
-    int BUFFER_SIZE = MAX_LINE_SIZE;   
+    
+    int BUFFER_SIZE = MAX_LINE_SIZE;
     linesToRead = TNUM / size;
     int globalstart = rank * linesToRead;
     int globalend   = globalstart + linesToRead;
     
     // Der letzter Prozessor
-    if (isLastProc(rank, size)){ 
-      globalend = TNUM; 
-      linesToRead = TNUM - linesToRead * (size -1) ;
-      };
+    if (isLastProc(rank, size)) {
+        globalend = TNUM;
+        linesToRead = TNUM - linesToRead * (size -1) ;
+    };
+    
+    // printf("Rank: %d; lines to read: %d", rank, linesToRead);
     
     char TWEETS[linesToRead * TSIZE];
     char buf[BUFFER_SIZE];
@@ -139,37 +188,39 @@ void exec(const int rank, const int size, const char* key) {
     int lines = 0;
     char* tweet;
     char* line;
-    for(tweet=TWEETS; (line = fgets(buf, BUFFER_SIZE, file)) != NULL; ++lines)
-    {
+    for(tweet = TWEETS; (line = fgets(buf, BUFFER_SIZE, file)) != NULL; ++lines) {
         if(lines < globalstart) continue;
         if(lines > globalend + 1) break;
         
         int fn = readNumber(&line);
-    	int ln = readNumber(&line);
-   		int month = readMonth(&line);
+        int ln = readNumber(&line);
+        int month = readMonth(&line);
         int day = readNumber(&line);
-
-        int hits = countHits(line, key);
-        writeTweet(TWEETS, tweet, fn, ln, hits, month, day, line);  
-        printTweet(tweet);      
         
-        tweet+=TSIZE;
+        int hits = countHits(line, key);
+        writeTweet(TWEETS, tweet, fn, ln, hits, month, day, line);
+        
+        tweet += TSIZE;
     }
     
     fclose(file);
+    
+    bitonicSort(TWEETS, 0 , linesToRead, 1);
+    writeOrderedTweets(TWEETS);
+    
 }
 
 
 
 int main(int argc, char** argv) {
-    if(argc != 2){
-      fprintf(stderr, "Please specify search key");
-      return EXIT_FAILURE;
+    if(argc != 2) {
+        fprintf(stderr, "Please specify search key");
+        return EXIT_FAILURE;
     }
-
+    
     // Initialize MPI
     MPI_Init(NULL, NULL);
-        
+    
     // Get the number of processes
     int size;
     MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -177,7 +228,7 @@ int main(int argc, char** argv) {
     // Get the rank of the process
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-       
+    
     exec(rank, size, argv[1]);
     
     char processor_name[MPI_MAX_PROCESSOR_NAME]; // Get the name of the processor
