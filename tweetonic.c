@@ -18,7 +18,7 @@
 
 // #define TNUM 2400000 // Zeilen
 #define TSIZE 32
-#define TNUM 10 // Zeilen
+#define TNUM 2 // Zeilen
 #define FIN "twitter.data10"
 
 // mask values for bit pattern of first byte in multi-byte
@@ -61,44 +61,104 @@ void printTweet(const char* t, char* buffer) {
 
 void writeOrderedTweets(char* TWEETS) {
     char* tweet = TWEETS;
-    char buffer[linesToRead * TSIZE *3];
+    char buffer[linesToRead * TSIZE * 3];
     for (int i = 0; i < linesToRead; i++, tweet+=TSIZE) {
         printTweet(tweet, buffer + i * TSIZE);
     }
     
 }
+ 
 
-void compare(char* tweet1, char* tweet2, int dir) {
-    for (int i = 6; i < TSIZE; i++) {
-        if (dir == (tweet1[i] > tweet2[i])) {
-            char* h = tweet1;
-            tweet1 = tweet2;
-            tweet2 = h;
-            printf("swap\n");
+void swap(char **str1_ptr, char **str2_ptr)
+{
+  char *temp = *str1_ptr;
+  *str1_ptr = *str2_ptr;
+  *str2_ptr = temp;
+}  
+
+void compare(char* TWEETS, int i, int k, int dir) {
+char* tweet1 = TWEETS + i * TSIZE;
+char* tweet2 = TWEETS + k * TSIZE;
+        for (int j = 6; j < TSIZE; j++) {
+        if (dir == (tweet1[j] > tweet2[j])) {
+            
+            swap(&tweet1, &tweet2);
+            
+            printf("Swap\n");
+            
             break;
         }
     }
 }
 
-void bitonicMerge(char* TWEETS, int lo, int cnt, int dir) {
-    if (cnt>1) {
-        int k= cnt / 2;
-        int i;
-        for (i = lo; i < lo + k; i++) compare(TWEETS + i, TWEETS + i + k, dir);
+void bitonicMerge(char* TWEETS, int start, int lines, int dir) {
+    if (lines > 1) {
+        int k = lines / 2;
+        for (int i = start; i < start + k ; i++) 
+          compare(TWEETS, i, k, dir);
         
-        bitonicMerge(TWEETS, lo, k, dir);
-        bitonicMerge(TWEETS, lo + k, k, dir);
+        bitonicMerge(TWEETS, start,     k, dir);
+        bitonicMerge(TWEETS, start + k, k, dir);
     }
 }
 
-void bitonicSort(char* TWEETS, int lo, int cnt, int dir) {
-    if (cnt > 1) {
-        int k = cnt / 2;
-        bitonicSort(TWEETS, lo, k, 1 /* ASCENDING */);
-        bitonicSort(TWEETS, lo + k, k, 0 /* DESCENDING */);
-        bitonicMerge(TWEETS, lo, cnt, dir);
+void bitonicSort(char* TWEETS, int start, int lines, int dir) {
+    if (lines > 1) {
+        int k = lines / 2;
+        bitonicSort(TWEETS, start,     k, 1 /* ASCENDING */);
+        bitonicSort(TWEETS, start + k, k, 0 /* DESCENDING */);
+        bitonicMerge(TWEETS, start, lines, dir);
     }
 }
+
+/*
+void compare2(char* tweet1, char* tweet2, int dir) {
+    for (int i = 6; i < TSIZE; i++) {
+        if (dir == (tweet1[i] > tweet2[i])) {
+            
+        }
+    }
+}
+
+int compare2(const char* ptr1, const char* ptr2) {
+	int i;
+	char* t1 = ptr1;
+	char* t2 = ptr2;
+	for (i=6; i<TSIZE; i++) {
+		if (t1[i] > t2[i]) return -1;
+		if (t2[i] > t1[i]) return 1;
+	}
+	return 0;
+}
+
+
+void bitonicSort2(char TWEETS[]){
+  for (int k = 2; k <= linesToRead; k *= 2) //Parallel bitonic sort 
+  { 
+    for (int j = k / 2; j>0; j /= 2) //Bitonic merge 
+    { 
+      int ixj = tid ^ j; //XOR 
+      if (ixj > tid) 
+      { 
+        if ((tid & k) == 0) // ascending descending 
+        { 
+          if (compare2(TWEETS[tid], TWEETS[void swap(int surface[][20], int x1, int y1, int x2, int y2) {
+  int temp = surface[x1][y1];
+    surface[x1][y1] = surface[x2][y2];
+    surface[x2][y2] = temp;
+}ixj]) == 1) 
+            swap(TWEETS[tid], TWEETS[ixj]);
+           
+        } 
+        else 
+        { 
+          if (compare2(TWEETS[tid], TWEETS[ixj]) == -1) 
+            swap(TWEETS[tid], TWEETS[ixj]); 
+        } 
+      }
+    } 
+  } 
+} */
 
 
 void handle_error(const char* msg) {
@@ -153,9 +213,9 @@ void writeTweet(char* TWEETS, char* tweet, const int fn, const int ln, const int
     *(tweet+7) = (char) month;
     *(tweet+8) = (char) day;
     int i;
-    int n = TSIZE-9;
+    int n = TSIZE - 9;
     for (i=strlen(line); i<n; i++) line[i] = ' '; // padding
-    memcpy(tweet + 9, line, n);
+      memcpy(tweet + 9, line, n);
     
 }
 
@@ -179,10 +239,15 @@ void exec(const int rank, const int size, const char* key) {
         globalend = TNUM;
         linesToRead = TNUM - linesToRead * (size -1) ;
     };
+
     
-    // printf("Rank: %d; lines to read: %d", rank, linesToRead);
+    // char Tweets[lineToRead][TSIZE]
+    char* TWEETS = (char*) calloc(linesToRead, TSIZE * sizeof(char));
+    if(TWEETS == NULL){
+       fprintf(stderr, "Not enough memory. \n");
+       exit(255);
+    }
     
-    char TWEETS[linesToRead * TSIZE];
     char buf[BUFFER_SIZE];
     
     int lines = 0;
@@ -190,7 +255,7 @@ void exec(const int rank, const int size, const char* key) {
     char* line;
     for(tweet = TWEETS; (line = fgets(buf, BUFFER_SIZE, file)) != NULL; ++lines) {
         if(lines < globalstart) continue;
-        if(lines > globalend + 1) break;
+        if(lines > globalend -1) break;
         
         int fn = readNumber(&line);
         int ln = readNumber(&line);
@@ -204,9 +269,12 @@ void exec(const int rank, const int size, const char* key) {
     }
     
     fclose(file);
-    
-    bitonicSort(TWEETS, 0 , linesToRead, 1);
+
+    bitonicSort(TWEETS, 0, TNUM, 1);
+    //bitonicSort2(TWEETS);
     writeOrderedTweets(TWEETS);
+    
+    free(TWEETS);
     
 }
 
