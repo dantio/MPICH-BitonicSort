@@ -23,7 +23,7 @@ unsigned int i,j,k;
       for (i=0; i<N; i++) {
 		int ij=i^j;
 		if ((ij)>i) {
-			if ((i&k)==0 && a[i] > a[ij]) 
+			if ((i&k) ==0 && a[i] > a[ij]) 
 			{
 				swap(i,ij);
 			}
