@@ -18,8 +18,8 @@
 
 // #define TNUM 2400000 // Zeilen
 #define TSIZE 32
-#define TNUM 8 // Zeilen
-#define FIN "twitter.data10"
+#define TNUM 512 // Zeilen
+#define FIN "twitter.data1000"
 
 // mask values for bit pattern of first byte in multi-byte
 // UTF-8 sequences:
@@ -94,7 +94,7 @@ void bitonic(){
 		ij = i ^ j;
 		if ((ij) > i) {
 		    c = compare(TWEETS[i], TWEETS[ij]);
-		    printf("%d - %d -  %d\n", i, j, ij);
+		    //printf("%d - %d -  %d\n", i, j, ij);
 			if ((i&k) == 0 && c == 1) 
 			{
 				swap(i,ij);
