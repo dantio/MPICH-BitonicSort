@@ -18,23 +18,22 @@
 
 // #define TNUM 2400000 // Zeilen
 #define TSIZE 32
-#define TNUM 512 // Zeilen
-#define FIN "twitter.data1000"
+#define TNUM 8 // Zeilen
+#define FIN "twitter.data10"
+#define U_MAX_BYTES 4
 
+char* MONTHS[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
+int linesToRead;
+char **TWEETS; // Pointers to Array of pointers
+
+/**
+ * UTF-8. Return length of the UTF-8 Character.
 // mask values for bit pattern of first byte in multi-byte
 // UTF-8 sequences:
 // 192 - 110xxxxx - for U+0080 to U+07FF
 // 224 - 1110xxxx - for U+0800 to U+FFFF
 // 240 - 11110xxx - for U+010000 to U+1FFFFF
-#define U_MAX_BYTES 4
-char* MONTHS[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-
-int linesToRead;
-char **TWEETS;
-
-/**
- * UTF-8. Return length of the UTF-8 Character.
-
 static unsigned short mask[] = {192, 224, 240};
 
 int u_getc(char chunk[], unsigned int offset, char bytes[]) {
@@ -47,7 +46,7 @@ int u_getc(char chunk[], unsigned int offset, char bytes[]) {
     return i;
 }
  */
- 
+
 void printTweet(const char* t, char* buffer) {
     int i;
     int n = 1;
@@ -70,45 +69,30 @@ void writeOrderedTweets() {
     }
     
 }
- 
+
 void swap(int i, int j) {
-  char *t = TWEETS[i];
-  TWEETS[i] = TWEETS[j];
-  TWEETS[j] = t;
+    char *t = TWEETS[i];
+    TWEETS[i] = TWEETS[j];
+    TWEETS[j] = t;
 }
 
 
 int compare(const char t1[TSIZE], const char t2[TSIZE]) {
-	for (int i = 6; i < TSIZE; i++) {
-		if (t1[i] > t2[i]) return -1;
-		if (t2[i] > t1[i]) return 1;
-	}
-	return 0;
+    for (int i = 6; i < TSIZE; i++) {
+        if (t1[i] > t2[i]) return -1;
+        if (t2[i] > t1[i]) return 1;
+    }
+    return 0;
 }
 
-void bitonic(){
-  unsigned int i,j,ij,k,c;
-  for (k = 2; k <= linesToRead; k = 2 * k) {
-    for (j = k >> 1; j > 0; j = j >> 1) {
-      for (i = 0; i < linesToRead; i++) {
-		ij = i ^ j;
-		if ((ij) > i) {
-		    c = compare(TWEETS[i], TWEETS[ij]);
-		    //printf("%d - %d -  %d\n", i, j, ij);
-			if ((i&k) == 0 && c == 1) 
-			{
-				swap(i,ij);
-			}
-			
-			if ((i&k) != 0 && c == -1)
-			{
-				swap(i,ij);
-			}
-		}
-      }
-    }
-  }
-	
+void bitonic() {
+    unsigned int i,j,ij,k,c;
+    for (k = 2; k <= linesToRead; k = 2 * k)
+        for (j = k >> 1; j > 0; j = j >> 1)
+            for (i = 0; i < linesToRead; i++)
+                if ((ij = i ^ j) > i && (c = compare(TWEETS[i], TWEETS[ij])))
+                    if ((!(i & k) && c == 1) || ( (i & k) && c == -1))
+                        swap(i,ij);
 }
 
 
@@ -137,8 +121,9 @@ int readMonth(char** lptr) {
     for (i=0, m=1; i<12; i++, m++)
         if (strncmp(line, MONTHS[i], 3) == 0)
             return m;
-    fprintf(stderr, "invalid month: %s\n", line);
-    exit(3);
+            
+    handle_error("invalid month");
+    return -1;
 }
 
 int countHits(const char* line, const char* key) {
@@ -163,9 +148,9 @@ void writeTweet(int i, const int fn, const int ln, const int hits,
     TWEETS[i][7] = (char) month;
     TWEETS[i][8] = (char) day;
     int n = TSIZE - 9;
-    char *ptr = &TWEETS[i][9]; 
+    char *ptr = &TWEETS[i][9];
     for (int j = strlen(line); i < n; i++) line[j] = ' '; // padding
-      memcpy(ptr, line, n);
+    memcpy(ptr, line, n);
     
 }
 
@@ -176,56 +161,56 @@ char isLastProc(const int rank, const int size) {
 void exec(const int rank, const int size, const char* key) {
 
     FILE* file = fopen(FIN, "r");
-    if (file == NULL) handle_error("open");
-    
+    if (file == NULL) handle_error("Cannon open File .\n");
     
     int BUFFER_SIZE = MAX_LINE_SIZE;
     linesToRead = TNUM / size;
+    
     int globalstart = rank * linesToRead;
     int globalend   = globalstart + linesToRead;
     
     // Der letzter Prozessor
     if (isLastProc(rank, size)) {
         globalend = TNUM;
-        linesToRead = TNUM - linesToRead * (size -1) ;
+        linesToRead = TNUM - linesToRead * (size -1);
     };
-
+    
     printf("Lines: %d\n", linesToRead);
     
-    
+    // Allocate size
     TWEETS = ( char** ) malloc(linesToRead * sizeof( char* ));
-    for (int i = 0; i < linesToRead; i++ )
-    {
-      if (( TWEETS[i] = ( char* ) malloc( TSIZE )) == NULL )
-       handle_error("NO SPACE");
-	}
+    for (int i = 0; i < linesToRead; i++ ) {
+        if (( TWEETS[i] = ( char* ) malloc( TSIZE )) == NULL)
+            handle_error("NO SPACE");
+    }
     
     char buf[BUFFER_SIZE];
     
-    int lines = 0;
+    unsigned int lines = 0, fn, ln, month, day, hits;
     char* line;
     for(int i = 0; (line = fgets(buf, BUFFER_SIZE, file)) != NULL; ++lines) {
         if(lines < globalstart) continue;
         if(lines > globalend -1) break;
         
-        int fn = readNumber(&line);
-        int ln = readNumber(&line);
-        int month = readMonth(&line);
-        int day = readNumber(&line);
+        fn = readNumber(&line);
+        ln = readNumber(&line);
+        month = readMonth(&line);
+        day = readNumber(&line);
         
-        int hits = countHits(line, key);
+        hits = countHits(line, key);
         writeTweet(i, fn, ln, hits, month, day, line);
         
         i++;
     }
     
     fclose(file);
-    writeOrderedTweets();
     bitonic();
+    
+    
     printf("Ordered\n");
     writeOrderedTweets();
     
-    // FREE 
+    // FREE
 }
 
 
