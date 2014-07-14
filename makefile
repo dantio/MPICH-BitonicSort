@@ -18,10 +18,10 @@ run1:
 run2: 
 	mpirun -np 2 ./${OUT} "app"
 	
-run2: 
+run4: 
 	mpirun -np 4 ./${OUT} "app"
 	
-run4: 
+run8: 
 	mpirun -np 8 ./${OUT} "app"
 	
 run16: 
