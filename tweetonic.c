@@ -68,12 +68,15 @@ char isPowerOfTwo(unsigned const int number) {
 
 
 void writeOrderedTweets() {
-    char buffer[100];
-    char allTweets[1000];
+    char buffer[500];
+    char allTweets[5000];
     for (int i = 0; i < linesToRead; i++) {
         TDATA *t = TWEETS[i];
-        printf( "%d - %d %d %d\n", i, t->fn, t->ln,t->hits);
+        sprintf(buffer, "%d - %d %d %d\n", i, t->fn, t->ln,t->hits);
+        strcat(allTweets, buffer);
     }
+    allTweets[strlen(allTweets)] = '\0';
+    printf("%s \n", allTweets);
 
 }
 
@@ -87,19 +90,19 @@ void swap(int i, int j) {
 int compare(const TDATA *t1, const TDATA *t2) {
 
 	if(t1->hits > t2->hits) return -1;
-	if(t2->hits < t1->hits) return 1;
+	if(t2->hits > t1->hits) return 1;
 	
 	if(t1->month > t2->month) return -1;
-	if(t2->month < t1->month) return 1;
+	if(t2->month > t1->month) return 1;
 	
 	if(t1->day > t2->day) return -1;
-	if(t2->day < t1->day) return 1;
-	
+	if(t2->day > t1->day) return 1;
 	
     for (int i = 0; i < TSIZE; i++) {
         if (t1->tweet[i] > t2->tweet[i]) return -1;
         if (t2->tweet[i] > t1->tweet[i]) return  1;
     }
+    
     return 0;
 }
 
