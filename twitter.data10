@@ -8,3 +8,22 @@
 0 7 Mar 12 レックウザ・ミュウ・app 仲間のなりにくさは異常。レックウザとギラティナにおいては、ダンジョンの難易度も高い。中継地点がないので、仲間にできなかった場合はかなり痛い。
 0 8 Mar 10 @nurfadilaah app aha
 0 9 Mar 17 @AshisNotSexy i app app appapp app u too please dont be sorry ash aha
+
+
+
+2
+4
+8
+16
+32
+64
+128
+
+00000001
+00000010 
+00000100
+00001000
+
+2^2 = 4
+
+2^x = 7872
