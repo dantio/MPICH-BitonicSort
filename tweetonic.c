@@ -49,10 +49,10 @@ int u_getc(char chunk[], unsigned int offset, char bytes[]) {
 
 char isPowerOfTwo(unsigned const int number) {
     return (
-        (number != 0)
-          &&
-        ((number & (number - 1)) == 0)
-    );
+               (number != 0)
+               &&
+               ((number & (number - 1)) == 0)
+           );
 }
 
 void printTweet(const char* t, char* buffer) {
@@ -140,12 +140,12 @@ int countHits(const char* line, const char* key) {
     int k = strlen(line) - n;
     int i;
     int hits = 0;
-    for (i = 0; i < k; i++, line++){
-        if (*line == *key){
+    for (i = 0; i < k; i++, line++) {
+        if (*line == *key) {
             if (memcmp(line, key, n) == 0)
                 hits++;
         }
-    }   
+    }
     return hits;
 }
 
@@ -169,6 +169,15 @@ char isLastProc(const int rank, const int size) {
     return rank != 0 && rank == size -1;
 }
 
+char **allocTweets(int lines) {
+    char **tweets = ( char** ) malloc(lines * sizeof( char* ));
+    for (int i = 0; i < lines; i++ ) {
+        if (( tweets[i] = ( char* ) malloc( TSIZE )) == NULL)
+            handle_error("NO SPACE");
+    }
+    return tweets;
+}
+
 void exec(const int rank, const int size, const char* key) {
 
     FILE* file = fopen(FIN, "r");
@@ -189,11 +198,7 @@ void exec(const int rank, const int size, const char* key) {
     //printf("Lines: %d\n", linesToRead);
     
     // Allocate size
-    TWEETS = ( char** ) malloc(linesToRead * sizeof( char* ));
-    for (int i = 0; i < linesToRead; i++ ) {
-        if (( TWEETS[i] = ( char* ) malloc( TSIZE )) == NULL)
-            handle_error("NO SPACE");
-    }
+    TWEETS = allocTweets(linesToRead);
     
     char buf[BUFFER_SIZE];
     
@@ -212,7 +217,7 @@ void exec(const int rank, const int size, const char* key) {
         
         hits = countHits(line, key);
         
-        writeTweet(i, rank, ln, hits, month, day, line);
+        writeTweet(i, fn, ln, hits, month, day, line);
         
         i++;
     }
@@ -221,70 +226,74 @@ void exec(const int rank, const int size, const char* key) {
     
     bitonic(linesToRead);
     
-    //writeOrderedTweets();
-    
     // Warten bis alle Prozessoren hier sind
     MPI_Barrier(MPI_COMM_WORLD);
-   
-    if(!isLastProc(rank, size) && (rank == 0 ||rank % 2 == 0)){
-      // Sende letzten TWEET
-      MPI_Send(TWEETS[linesToRead -1], TSIZE, MPI_CHAR, rank + 1, 0, MPI_COMM_WORLD);
-      printf("Rank %d send last tweet\n", rank);
+    
+    if(!isLastProc(rank, size) && (rank == 0 ||rank % 2 == 0)) {
+        // Sende letzten TWEET
+        MPI_Send(TWEETS[linesToRead -1], TSIZE, MPI_CHAR, rank + 1, 0, MPI_COMM_WORLD);
     }
     
-    if(rank != 0 && rank % 2 != 0){
-      printf("Rank %d wait for last tweet\n", rank);
-      char lastTweet[TSIZE];
-      MPI_Recv(&lastTweet, TSIZE, MPI_CHAR, rank - 1, 0, MPI_COMM_WORLD,
-             MPI_STATUS_IGNORE);
-      printf("Rank %d received last tweet\n", rank);
-      
-      int j = 0;
-      for(; j < linesToRead; j++) {  
-        if(compare(&lastTweet, TWEETS[j]) == -1)
-      	  continue;
-      	else break;      
-      }
-      
-      // der first Tweet des rechten Knoten ist kleiner
-      int nbytes = (linesToRead - j) * TSIZE; 
-      MPI_Send(TWEETS[j], nbytes, MPI_CHAR, rank - 1, 1, MPI_COMM_WORLD);	
-      
-      if(nbytes != 0){
-        //MPI_Recv(TWEETS[j], nbytes, MPI_CHAR, rank - 1, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);  
-      } 
+    if(rank != 0 && rank % 2 != 0) {
+        char lastTweet[TSIZE];
+        MPI_Recv(&lastTweet, TSIZE, MPI_CHAR, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        
+        // Its der letzte TWEET groeser als die ersten im rechten Knoten?
+        int j = 0;
+        for(; j < linesToRead; j++) {
+            if(compare(&lastTweet, TWEETS[j]) == 1) {
+                continue;
+            } else break;
+        }
+        
+        // nbytes ist hier 0 rechter Knoten keine kleineren hat es nicht so ist
+        int nbytes = j * TSIZE;
+        MPI_Send(TWEETS[0], nbytes, MPI_CHAR, rank - 1, 2, MPI_COMM_WORLD);
+        
+        // Wir bekommenn die anderen Tweets zurueck
+        if(nbytes != 0) {
+            MPI_Recv(TWEETS[0], nbytes, MPI_CHAR, rank - 1, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        }
     }
     
     
-    if(!isLastProc(rank, size) && (rank == 0 ||rank % 2 == 0)){
+    if(!isLastProc(rank, size) && (rank == 0 ||rank % 2 == 0)) {
+    
         MPI_Status status;
-        int  nbytes;
-   
-       MPI_Probe(rank + 1, 1, MPI_COMM_WORLD, &status);
-       // It will block the caller until a message is ready
-
-       // Obtain message size...
-       MPI_Get_count(&status, MPI_CHAR, &nbytes); 
-
-       // Allocate memory to receive data
-       if ( nbytes == MPI_UNDEFINED ){
-       	// ERROR
-       }    
-      
-       if(nbytes != 0){ 
-         int lines = nbytes / TSIZE;
-         
-        // MPI_Send(TWEETS[lines - 1], nbytes, MPI_CHAR, rank + 1, 2, MPI_COMM_WORLD);	
-         
-         //char recLines[lines][TSIZE];
-
-         // Finally, receive the message with a correctly sized buffer...
-        // MPI_Recv(TWEETS[lines - 1], nbytes, MPI_CHAR, rank + 1, 1, MPI_COMM_WORLD, &status);   
-         //char buff[TSIZE];
-	     //printTweet(recLines[0], buff);  
-	 }  
+        int  nbytes = 0;
+        // Wieviel will der rechte knoten uns schicken?
+        MPI_Probe(rank + 1, 2, MPI_COMM_WORLD, &status);
+        // It will block the caller until a message is ready
+        
+        if(MPI_Get_count(&status, MPI_CHAR, &nbytes) == MPI_UNDEFINED) {
+            handle_error("Error msg");
+        }
+        
+        // kopie von nbytes, da es nach MPI_Recv komische zahl hat
+        int bytes = nbytes;
+        int lines = bytes / TSIZE;
+        
+        // Platz fuer die Tweets aus dem rechten Knoten
+        char **movedTweets = allocTweets(lines);
+        
+        // Finally, receive the message with a correctly sized buffer...
+        MPI_Recv(movedTweets[0], nbytes, MPI_CHAR, rank + 1, 2, MPI_COMM_WORLD, &status);
+        if(nbytes != 0) {
+        
+        
+            MPI_Send(TWEETS[lines - 1], bytes, MPI_CHAR, rank + 1, 3, MPI_COMM_WORLD);
+            for(int k = 0; lines - 1 < linesToRead; lines++, k++) {
+                char *freeMee = TWEETS[lines];
+                TWEETS[lines - 1] = movedTweets[k];
+                free(freeMee);
+            }
+        }
     }
-
+    
+    bitonic(linesToRead);
+    MPI_Barrier(MPI_COMM_WORLD);
+    writeOrderedTweets();
+    //printf("---------------\n");
     
     // FREE
 }
@@ -314,8 +323,8 @@ int main(int argc, char** argv) {
     int name_len;
     MPI_Get_processor_name(processor_name, &name_len);
     // Print off a hello world message
-   // printf("Hello world from processor %s, rank %d out of %d processors\n",
-     //      processor_name, rank, size);
+    // printf("Hello world from processor %s, rank %d out of %d processors\n",
+    //      processor_name, rank, size);
     // Finalize the MPI environment. No more MPI calls can be made after this
     MPI_Finalize();
     return EXIT_SUCCESS;
