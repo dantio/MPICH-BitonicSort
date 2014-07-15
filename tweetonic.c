@@ -233,6 +233,99 @@ TDATA **getTweetFromFile(FILE *file, const char* key,  unsigned int size, long o
     return tweetsFromFile;
 }
 
+void parallel(FILE* file, const char* key, int rank, int size){
+    if(!isLastProc(rank, size) && (rank == 0 ||rank % 2 == 0)) {
+        // Sende letzten
+        // printf(">>>>%d  - %d\n",TWEETS[linesToRead - 1]->ln,  TWEETS[linesToRead - 1]->hits);
+        MPI_Send(&(TWEETS[linesToRead - 1]->offset), 1, MPI_LONG, rank + 1, 0, MPI_COMM_WORLD);
+    }
+    
+    if(rank != 0 && rank % 2 != 0) {
+    
+        long lastTweetLn[1];
+        MPI_Recv(lastTweetLn, 1, MPI_LONG, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        
+        // Ist der letzte TWEET groeser als die ersten im rechten Knoten?
+        int j = 0;
+        
+        TDATA **tweetsFromFile = getTweetFromFile(file, key, 1, lastTweetLn);
+        //writeOrderedTweets(tweetsFromFile, 1);
+        
+        for(int i = 0; j < linesToRead; i++) {
+            if(compare( tweetsFromFile[0], TWEETS[i]) == 1)
+                j++;
+            else
+                break;
+        }
+        
+        printf("SEND %d tweets\n ", j);
+        
+        if(j > 0) {
+            long sendTweetsLn[j];
+            
+            for(int i = 0; i < j; i++) sendTweetsLn[i] = TWEETS[i]->offset;
+           // printf("-- %d TWEET\n ", TWEETS[2]->ln);
+            
+            MPI_Send(sendTweetsLn, j, MPI_LONG, rank - 1, 2, MPI_COMM_WORLD);
+            
+            // Wir bekommenn die anderen Tweets zurueck
+            MPI_Recv(sendTweetsLn, j, MPI_LONG, rank - 1, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            TDATA **tweetsFromLeft = getTweetFromFile(file, key, j, sendTweetsLn);
+            // writeOrderedTweets(tweetsFromLeft, j);
+            for(int k = 0; k < j; k++) {
+                //TDATA *freeMee = &TWEETS[k];
+                TWEETS[k] = tweetsFromLeft[k];
+                //free(freeMee);
+            }
+            
+        } else {
+            MPI_Send(NULL, 0, MPI_LONG, rank - 1, 2, MPI_COMM_WORLD);
+        }
+    }
+    
+    
+    if(!isLastProc(rank, size) && (rank == 0 ||rank % 2 == 0)) {
+    
+        MPI_Status status;
+        int  nbytes = 0;
+        // Wieviel will der rechte knoten uns schicken?
+        MPI_Probe(rank + 1, 2, MPI_COMM_WORLD, &status);
+        // It will block the caller until a message is ready
+        
+        if(MPI_Get_count(&status, MPI_LONG, &nbytes) == MPI_UNDEFINED) {
+            handle_error("Error msg");
+        }
+        
+        // kopie von nbytes, da es nach MPI_Recv komische zahl hat
+        int tweets = nbytes;
+        
+        printf("RANK %d GET %d TWEET\n",rank, tweets);
+        
+        long sendTweetsLn[tweets];
+        // Finally, receive the message with a correctly sized buffer...
+        MPI_Recv(&sendTweetsLn, tweets, MPI_LONG, rank + 1, 2, MPI_COMM_WORLD, &status);
+        
+        char buff[200];
+        
+        if(tweets != 0) {
+            // Platz fuer die Tweets aus dem rechten Knoten
+            TDATA **tweetsFromRight = getTweetFromFile(file, key, tweets, sendTweetsLn);
+           // writeOrderedTweets(tweetsFromRight, tweets);
+            for(int i = linesToRead - tweets, j = 0; i < linesToRead; i++, j++) sendTweetsLn[j] = TWEETS[i]->offset;
+            
+            MPI_Send(&sendTweetsLn, tweets, MPI_LONG, rank + 1, 3, MPI_COMM_WORLD);
+            
+            for(int k = 0, m = linesToRead - tweets; m < linesToRead; m++, k++) {
+                //TDATA *freeMee = TWEETS[m];
+                TWEETS[m] = tweetsFromRight[k];
+                //free(freeMee);
+            }
+        }
+    }
+
+
+}
+
 void exec(const int rank, const int size, const char* key) {
 
     FILE* file = fopen(FIN, "r");
@@ -291,96 +384,14 @@ void exec(const int rank, const int size, const char* key) {
     MPI_Barrier(MPI_COMM_WORLD);
     writeOrderedTweets(TWEETS, linesToRead);
     
-    if(!isLastProc(rank, size) && (rank == 0 ||rank % 2 == 0)) {
-        // Sende letzten
-        // printf(">>>>%d  - %d\n",TWEETS[linesToRead - 1]->ln,  TWEETS[linesToRead - 1]->hits);
-        MPI_Send(&(TWEETS[linesToRead - 1]->offset), 1, MPI_LONG, rank + 1, 0, MPI_COMM_WORLD);
-    }
-    
-    if(rank != 0 && rank % 2 != 0) {
-    
-        long lastTweetLn[1];
-        MPI_Recv(lastTweetLn, 1, MPI_LONG, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        
-        // Ist der letzte TWEET groeser als die ersten im rechten Knoten?
-        int j = 0;
-        
-        TDATA **tweetsFromFile = getTweetFromFile(file, key, 1, lastTweetLn);
-        //writeOrderedTweets(tweetsFromFile, 1);
-        
-        for(int i = 0; j < linesToRead; i++) {
-            if(compare( tweetsFromFile[0], TWEETS[i]) == 1)
-                j++;
-            else
-                break;
-        }
-        
-        printf("SEND %d tweets\n ", j);
-        
-        if(j > 0) {
-            long sendTweetsLn[j];
-            
-            for(int i = 0; i < j; i++) sendTweetsLn[i] = TWEETS[i]->offset;
-            printf("-- %d TWEET\n ", TWEETS[2]->ln);
-            
-            MPI_Send(sendTweetsLn, j, MPI_LONG, rank - 1, 2, MPI_COMM_WORLD);
-            
-            // Wir bekommenn die anderen Tweets zurueck
-            MPI_Recv(sendTweetsLn, j, MPI_LONG, rank - 1, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            TDATA **tweetsFromLeft = getTweetFromFile(file, key, j, sendTweetsLn);
-            // writeOrderedTweets(tweetsFromLeft, j);
-            for(int k = 0; k < j; k++) {
-                //TDATA *freeMee = &TWEETS[k];
-                TWEETS[k] = tweetsFromLeft[k];
-                //free(freeMee);
-            }
-            
-        } else {
-            MPI_Send(NULL, 0, MPI_LONG, rank - 1, 2, MPI_COMM_WORLD);
-        }
-    }
-    
-    
-    if(!isLastProc(rank, size) && (rank == 0 ||rank % 2 == 0)) {
-    
-        MPI_Status status;
-        int  nbytes = 0;
-        // Wieviel will der rechte knoten uns schicken?
-        MPI_Probe(rank + 1, 2, MPI_COMM_WORLD, &status);
-        // It will block the caller until a message is ready
-        
-        if(MPI_Get_count(&status, MPI_LONG, &nbytes) == MPI_UNDEFINED) {
-            handle_error("Error msg");
-        }
-        
-        // kopie von nbytes, da es nach MPI_Recv komische zahl hat
-        int tweets = nbytes;
-        
-        printf("RANK %d GET %d TWEET\n",rank, tweets);
-        
-        long sendTweetsLn[tweets];
-        // Finally, receive the message with a correctly sized buffer...
-        MPI_Recv(&sendTweetsLn, tweets, MPI_LONG, rank + 1, 2, MPI_COMM_WORLD, &status);
-        
-        char buff[200];
-        
-        if(tweets != 0) {
-            // Platz fuer die Tweets aus dem rechten Knoten
-            TDATA **tweetsFromRight = getTweetFromFile(file, key, tweets, sendTweetsLn);
-           // writeOrderedTweets(tweetsFromRight, tweets);
-            for(int i = linesToRead - tweets, j = 0; i < linesToRead; i++, j++) sendTweetsLn[j] = TWEETS[i]->offset;
-            
-            MPI_Send(&sendTweetsLn, tweets, MPI_LONG, rank + 1, 3, MPI_COMM_WORLD);
-            
-            for(int k = 0, m = linesToRead - tweets; m < linesToRead; m++, k++) {
-                //TDATA *freeMee = TWEETS[m];
-                TWEETS[m] = tweetsFromRight[k];
-                //free(freeMee);
-            }
-        }
-    }
+	parallel(file, key, rank, size);
     
     bitonic(linesToRead);
+    
+    parallel(file, key, rank, size);
+    
+    bitonic(linesToRead);
+    
     MPI_Barrier(MPI_COMM_WORLD);
     
      writeOrderedTweets(TWEETS, linesToRead);
