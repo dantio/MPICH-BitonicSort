@@ -14,13 +14,13 @@
 
 // 1  +  1  +  N   + 1  +   3  +    1  +   2  +  1 +  140 * 3 + 1
 // 0  + ' ' + '10' + ' ' + 'MAR' + ' ' + '02' + ' '+ 'tweet' + '\n'
-#define MAX_LINE_SIZE 722
+#define MAX_LINE_SIZE 1000
 
 // #define TNUM 2400000 // Zeilen
 #define TSIZE 24
-#define TNUM 8 // Zeilen
+#define TNUM 128 // Zeilen
 
-#define FIN "twitter.data10"
+#define FIN "twitter.data1000"
 #define U_MAX_BYTES 4
 
 char* MONTHS[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
@@ -179,8 +179,7 @@ void writeTweet(TDATA **T, unsigned int i, const unsigned int fn, const unsigned
     tweet->month = (char) month;
     tweet->day = (char) day;
     
-    int j = strlen(line);
-    for (int k = 0; k < TSIZE; k++) line[k] = ' '; // padding
+    for (int k = strlen(line); k < TSIZE; k++) line[k] = ' '; // padding
     memcpy(tweet->tweet, line, TSIZE);
 }
 
@@ -189,11 +188,9 @@ char isLastProc(const int rank, const int size) {
 }
 
 TDATA **allocTweets(int lines) {
-    // TODO
-    int size = sizeof(TDATA);
-    TDATA *data = ( TDATA* ) malloc(lines * size);
+    TDATA *data = ( TDATA* ) malloc(lines * sizeof(TDATA));
     TDATA **tweets = ( TDATA** ) malloc(lines * sizeof(TDATA*));
-    for (int i = 0, j = 0; j < lines; i+= size, j++) tweets[j] = data + i;
+    for (int i = 0; i < lines; i++) tweets[i] = &(data[i]);
     
     return tweets;
 }
@@ -258,7 +255,7 @@ void parallel(FILE* file, const char* key, int rank, int size){
                 break;
         }
         
-        printf("SEND %d tweets\n ", j);
+       // printf("SEND %d tweets\n ", j);
         
         if(j > 0) {
             long sendTweetsLn[j];
@@ -304,8 +301,6 @@ void parallel(FILE* file, const char* key, int rank, int size){
         long sendTweetsLn[tweets];
         // Finally, receive the message with a correctly sized buffer...
         MPI_Recv(&sendTweetsLn, tweets, MPI_LONG, rank + 1, 2, MPI_COMM_WORLD, &status);
-        
-        char buff[200];
         
         if(tweets != 0) {
             // Platz fuer die Tweets aus dem rechten Knoten
@@ -382,9 +377,9 @@ void exec(const int rank, const int size, const char* key) {
     
     // Warten bis alle Prozessoren hier sind
     MPI_Barrier(MPI_COMM_WORLD);
-    writeOrderedTweets(TWEETS, linesToRead);
+    //writeOrderedTweets(TWEETS, linesToRead);
     
-	parallel(file, key, rank, size);
+	//parallel(file, key, rank, size);
     
     bitonic(linesToRead);
     
@@ -421,7 +416,11 @@ int main(int argc, char** argv) {
     
     exec(rank, size, argv[1]);
     
-    // writeTweet(t, 1, 2, 3, 4, 5, 6, line, 7);
+    /*TDATA **tweets = allocTweets(300);
+    char line[32] = "hello";
+    for(int i = 0; i < 300; i++)
+      writeTweet(tweets, i, 2, 3, 4, 5, 6, line, 7);*/
+    
     char processor_name[MPI_MAX_PROCESSOR_NAME]; // Get the name of the processor
     int name_len;
     MPI_Get_processor_name(processor_name, &name_len);
