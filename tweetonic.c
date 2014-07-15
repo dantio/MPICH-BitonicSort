@@ -194,7 +194,7 @@ TDATA **allocTweets(int lines) {
     TDATA *data = ( TDATA* ) malloc(lines * size);
     TDATA **tweets = ( TDATA** ) malloc(lines * sizeof(TDATA*));
     for (int i = 0, j = 0; j < lines; i+= size, j++) tweets[j] = data + i;
-   
+    
     return tweets;
 }
 
@@ -210,14 +210,14 @@ TDATA **getTweetFromFile(FILE *file, const char* key,  unsigned int size, long o
     unsigned int day;
     unsigned int hits;
     
-    for(int  i = 0; i < size; ++i){
-    	fseek(file, offset[i], SEEK_SET);
-    	
-    	line = fgets(buf, MAX_LINE_SIZE, file);
-    	if(line == NULL) handle_error("file is null");
-    	//printf("%s", line);
-        	
-    	fn = readNumber(&line);
+    for(int  i = 0; i < size; ++i) {
+        fseek(file, offset[i], SEEK_SET);
+        
+        line = fgets(buf, MAX_LINE_SIZE, file);
+        if(line == NULL) handle_error("file is null");
+        //printf("%s", line);
+        
+        fn = readNumber(&line);
         
         ln = readNumber(&line);
         
@@ -227,8 +227,6 @@ TDATA **getTweetFromFile(FILE *file, const char* key,  unsigned int size, long o
         hits = countHits(line, key);
         
         writeTweet(tweetsFromFile, i, fn, ln, hits, month, day, line, offset[i]);
-        
-       // printf("f>>> %ld ", offset[i]);writeOrderedTweets(tweetsFromFile, 1);
     }
     
     
@@ -270,7 +268,7 @@ void exec(const int rank, const int size, const char* key) {
         if(lines > globalend -1) break;
         
         offset = ftell(file) - strlen(line);
-        	
+        
         fn = readNumber(&line);
         
         ln = readNumber(&line);
@@ -286,7 +284,7 @@ void exec(const int rank, const int size, const char* key) {
     }
     
     
-
+    
     bitonic(linesToRead);
     
     // Warten bis alle Prozessoren hier sind
@@ -295,15 +293,15 @@ void exec(const int rank, const int size, const char* key) {
     
     if(!isLastProc(rank, size) && (rank == 0 ||rank % 2 == 0)) {
         // Sende letzten
-       // printf(">>>>%d  - %d\n",TWEETS[linesToRead - 1]->ln,  TWEETS[linesToRead - 1]->hits);
+        // printf(">>>>%d  - %d\n",TWEETS[linesToRead - 1]->ln,  TWEETS[linesToRead - 1]->hits);
         MPI_Send(&(TWEETS[linesToRead - 1]->offset), 1, MPI_LONG, rank + 1, 0, MPI_COMM_WORLD);
     }
     
     if(rank != 0 && rank % 2 != 0) {
-             
+    
         long lastTweetLn[1];
         MPI_Recv(lastTweetLn, 1, MPI_LONG, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-           
+        
         // Ist der letzte TWEET groeser als die ersten im rechten Knoten?
         int j = 0;
         
@@ -316,14 +314,14 @@ void exec(const int rank, const int size, const char* key) {
             else
                 break;
         }
-
+        
         printf("SEND %d tweets\n ", j);
         
         if(j > 0) {
             long sendTweetsLn[j];
             
             for(int i = 0; i < j; i++) sendTweetsLn[i] = TWEETS[i]->offset;
-             printf("-- %d TWEET\n ", TWEETS[2]->ln);
+            printf("-- %d TWEET\n ", TWEETS[2]->ln);
             
             MPI_Send(sendTweetsLn, j, MPI_LONG, rank - 1, 2, MPI_COMM_WORLD);
             
@@ -357,7 +355,7 @@ void exec(const int rank, const int size, const char* key) {
         
         // kopie von nbytes, da es nach MPI_Recv komische zahl hat
         int tweets = nbytes;
-
+        
         printf("RANK %d GET %d TWEET\n",rank, tweets);
         
         long sendTweetsLn[tweets];
@@ -365,11 +363,11 @@ void exec(const int rank, const int size, const char* key) {
         MPI_Recv(&sendTweetsLn, tweets, MPI_LONG, rank + 1, 2, MPI_COMM_WORLD, &status);
         
         char buff[200];
-       
+        
         if(tweets != 0) {
             // Platz fuer die Tweets aus dem rechten Knoten
             TDATA **tweetsFromRight = getTweetFromFile(file, key, tweets, sendTweetsLn);
-            writeOrderedTweets(tweetsFromRight, tweets);
+           // writeOrderedTweets(tweetsFromRight, tweets);
             for(int i = linesToRead - tweets, j = 0; i < linesToRead; i++, j++) sendTweetsLn[j] = TWEETS[i]->offset;
             
             MPI_Send(&sendTweetsLn, tweets, MPI_LONG, rank + 1, 3, MPI_COMM_WORLD);
@@ -385,7 +383,7 @@ void exec(const int rank, const int size, const char* key) {
     bitonic(linesToRead);
     MPI_Barrier(MPI_COMM_WORLD);
     
-   // writeOrderedTweets(TWEETS, linesToRead);
+     writeOrderedTweets(TWEETS, linesToRead);
     //printf("---------------\n");
     fclose(file);
     // FREE
@@ -411,15 +409,13 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     
     exec(rank, size, argv[1]);
-    char line[] = "hallo";
-    TDATA** t = allocTweets(4);
     
-   // writeTweet(t, 1, 2, 3, 4, 5, 6, line, 7);
+    // writeTweet(t, 1, 2, 3, 4, 5, 6, line, 7);
     char processor_name[MPI_MAX_PROCESSOR_NAME]; // Get the name of the processor
     int name_len;
     MPI_Get_processor_name(processor_name, &name_len);
     // Print off a hello world message
-  //  printf("Hello world from processor %s, rank %d out of %d processors\n", processor_name, rank, size);
+    //  printf("Hello world from processor %s, rank %d out of %d processors\n", processor_name, rank, size);
     // Finalize the MPI environment. No more MPI calls can be made after this
     MPI_Finalize();
     return EXIT_SUCCESS;
