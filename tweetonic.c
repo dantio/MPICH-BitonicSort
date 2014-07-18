@@ -17,7 +17,7 @@
 #define MAX_LINE_SIZE 1000
 
 // #define TNUM 2400000 // Zeilen
-#define FNUM 16	
+#define FNUM 16
 #define TSIZE 24
 #define TNUM 512 // Zeilen
 
@@ -94,16 +94,23 @@ void swap(int i, int j) {
 
 
 int compare(const TDATA *t1, const TDATA *t2) {
+	
+	//printf("%d - %d\n",t1,  t2);
+	if(t2 == NULL) return -1;
+	if(t1 == NULL) return 1;
+	
+	//printf("%d %d %d\n", t2, *(&(**t2)), &t2);
+	//if(*(t2->tweet) == NULL) return -1;
 
     if(t1->hits > t2->hits) return -1;
     if(t2->hits > t1->hits) return 1;
-
+   
     if(t1->month > t2->month) return -1;
     if(t2->month > t1->month) return 1;
-     
+    
     if(t1->day > t2->day) return -1;
     if(t2->day > t1->day) return 1;
-       return 0;
+
     for (int i = 0; i < TSIZE; i++) {
         if (t1->tweet[i] > t2->tweet[i]) return -1;
         if (t2->tweet[i] > t1->tweet[i]) return  1;
@@ -117,9 +124,10 @@ void bitonic(unsigned int lines) {
     for (k = 2; k <= lines; k = 2 * k)
         for (j = k >> 1; j > 0; j = j >> 1)
             for (i = 0; i < lines; i++)
+              if(ij < lines)
                 if ((ij = i ^ j) > i && (c = compare(TWEETS[i], TWEETS[ij])))
                     if ((!(i & k) && c == 1) || ( (i & k) && c == -1))
-                        swap(i,ij);
+                        swap(i,ij); 
 }
 
 
@@ -194,7 +202,7 @@ char isLastProc(const int rank, const int size) {
 TDATA **allocTweets(int lines) {
     TDATA *data = ( TDATA* ) malloc(lines * sizeof(TDATA));
     TDATA **tweets = ( TDATA** ) malloc(lines * sizeof(TDATA*));
-    for (int i = 0; i < lines; i++) tweets[i] = &(data[i]);
+    for (int i = 0; i < lines ; i++) tweets[i] = &(data[i]);
     
     return tweets;
 }
@@ -333,16 +341,15 @@ void parallel(FILE* file, const char* key, int rank, int size) {
             TDATA **tweetsFromRight = getTweetFromFile(file, key, tweets, sendTweetsLn);
             int j = 0;
             int k = 0;
-            
+            int g = tweets - 1;
             int h = 0;
             // Welche Tweets sind  besser?
             int i = 0;
             for(j = linesToRead - 1; j > -1 && i < tweets; j--, i++) {
-                if(compare(tweetsFromRight[tweets - 1], TWEETS[j]) == -1){
-                //printf("xxxxxxxxx\n");
-                continue;
-                }
-                else break;
+                if(compare(tweetsFromRight[g], TWEETS[j]) == -1) {
+                    g--;
+                    continue;
+                } else break;
             }
             
             h = linesToRead - i;
@@ -384,7 +391,7 @@ void exec(const int rank, const int size, const char* key) {
         linesToRead = TNUM - linesToRead * (size -1);
     };
     
-    //printf("Lines: %d\n", linesToRead);
+    printf("Lines: %d\n", linesToRead);
     
     // Allocate size
     TWEETS = allocTweets(linesToRead);
@@ -418,15 +425,17 @@ void exec(const int rank, const int size, const char* key) {
         i++;
     }
     
+
     bitonic(linesToRead);
+    //printf("%d \n", TWEETS[301]);
     
     // Warten bis alle Prozessoren hier sind
     MPI_Barrier(MPI_COMM_WORLD);
-    writeOrderedTweets(rank, TWEETS, linesToRead);
+    //writeOrderedTweets(rank, TWEETS, linesToRead);
     
-    //parallel(file, key, rank, size);
+    parallel(file, key, rank, size);
     
-    bitonic(linesToRead);
+     bitonic(linesToRead);
     
     parallel(file, key, rank, size);
     
