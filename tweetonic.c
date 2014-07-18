@@ -17,10 +17,11 @@
 #define MAX_LINE_SIZE 1000
 
 // #define TNUM 2400000 // Zeilen
+#define FNUM 16	
 #define TSIZE 24
-#define TNUM 8 // Zeilen
+#define TNUM 512 // Zeilen
 
-#define FIN "twitter.data10"
+#define FIN "twitter.data1000"
 #define U_MAX_BYTES 4
 
 char* MONTHS[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
@@ -70,9 +71,11 @@ char isPowerOfTwo(unsigned const int number) {
 }
 
 
-void writeOrderedTweets(TDATA **T, int size) {
+void writeOrderedTweets(int rank, TDATA **T, int size) {
     char buffer[500] = "";
     char allTweets[5000] = "";
+    sprintf(buffer, "-----  Rank %d ------ \n", rank);
+    strcat(allTweets, buffer);
     for (int i = 0; i < size; i++) {
         TDATA *t = T[i];
         sprintf(buffer, "%d - %d\n", t->ln, t->hits);
@@ -94,13 +97,13 @@ int compare(const TDATA *t1, const TDATA *t2) {
 
     if(t1->hits > t2->hits) return -1;
     if(t2->hits > t1->hits) return 1;
-    
+
     if(t1->month > t2->month) return -1;
     if(t2->month > t1->month) return 1;
-    
+     
     if(t1->day > t2->day) return -1;
     if(t2->day > t1->day) return 1;
-    
+       return 0;
     for (int i = 0; i < TSIZE; i++) {
         if (t1->tweet[i] > t2->tweet[i]) return -1;
         if (t2->tweet[i] > t1->tweet[i]) return  1;
@@ -181,6 +184,7 @@ void writeTweet(TDATA **T, unsigned int i, const unsigned int fn, const unsigned
     
     for (int k = strlen(line); k < TSIZE; k++) line[k] = ' '; // padding
     memcpy(tweet->tweet, line, TSIZE);
+    
 }
 
 char isLastProc(const int rank, const int size) {
@@ -224,8 +228,8 @@ TDATA **getTweetFromFile(FILE *file, const char* key,  unsigned int size, long o
         hits = countHits(line, key);
         
         writeTweet(tweetsFromFile, i, fn, ln, hits, month, day, line, offset[i]);
+        
     }
-    
     
     return tweetsFromFile;
 }
@@ -250,12 +254,13 @@ void parallel(FILE* file, const char* key, int rank, int size) {
         //writeOrderedTweets(tweetsFromFile, 1);
         
         for(int i = 0; j < linesToRead; i++) {
-            if(compare( tweetsFromFile[0], TWEETS[i]) == 1)
+            int c = compare( TWEETS[i],tweetsFromFile[0] );
+            if( c == -1 )
                 j++;
             else
                 break;
         }
-
+        
         
         if(j > 0) {
             long sendTweetsLn[j];
@@ -285,13 +290,15 @@ void parallel(FILE* file, const char* key, int rank, int size) {
             MPI_Recv(recTweets, tweets, MPI_LONG, rank - 1, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             printf("4.RANK %d GET %d TWEET\n",rank, tweets);
             
-            TDATA **tweetsFromLeft = getTweetFromFile(file, key, j, recTweets);
+            TDATA **tweetsFromLeft = getTweetFromFile(file, key, tweets, recTweets);
+            
             // writeOrderedTweets(tweetsFromLeft, j);
             for(int k = 0; k < tweets; k++) {
-                //TDATA *freeMee = &TWEETS[k];
+                //TDATA *freeMee = TWEETS[k];
                 TWEETS[k] = tweetsFromLeft[k];
                 //free(freeMee);
             }
+            
             
         } else {
             MPI_Send(NULL, 0, MPI_LONG, rank - 1, 2, MPI_COMM_WORLD);
@@ -321,23 +328,40 @@ void parallel(FILE* file, const char* key, int rank, int size) {
         MPI_Recv(&sendTweetsLn, tweets, MPI_LONG, rank + 1, 2, MPI_COMM_WORLD, &status);
         
         if(tweets != 0) {
+        
             // Platz fuer die Tweets aus dem rechten Knoten
             TDATA **tweetsFromRight = getTweetFromFile(file, key, tweets, sendTweetsLn);
-			int j = 0;
-			int k = 0;
-			for(; j < tweets; j++){
-				// Sind die von rechten kleiner?
-				int c = compare(tweetsFromRight[k], TWEETS[linesToRead - tweets + j]);
-				if(c == -1 || c == 0){
-				   sendTweetsLn[k] = TWEETS[linesToRead - tweets + j]->offset;
-				   TWEETS[linesToRead - tweets + j] = tweetsFromRight[k]; 
-				   k++;
-				} 
-			}
-			printf("6.RANK %d SEND %d TWEET\n",rank, k);
-        
+            int j = 0;
+            int k = 0;
+            
+            int h = 0;
+            // Welche Tweets sind  besser?
+            int i = 0;
+            for(j = linesToRead - 1; j > -1 && i < tweets; j--, i++) {
+                if(compare(tweetsFromRight[tweets - 1], TWEETS[j]) == -1){
+                //printf("xxxxxxxxx\n");
+                continue;
+                }
+                else break;
+            }
+            
+            h = linesToRead - i;
+            printf("JJJ %d\n", j);
+            
+            
+            for(; k  < i ; k++, h++) {
+                //printf("%d - %d \n",TWEETS[linesToRead - tweets + j]->hits, tweetsFromRight[k]->hits);
+                sendTweetsLn[k] = TWEETS[h]->offset;
+                //TDATA *freeMee = TWEETS[linesToRead - tweets + j];
+                TWEETS[h] = tweetsFromRight[k];
+                //free(freeMee);
+                
+            }
+            
+            printf("6.RANK %d SEND %d TWEET\n",rank, k);
+            
             // Unblocked!
-            MPI_Send(&sendTweetsLn, k, MPI_LONG, rank + 1, 3, MPI_COMM_WORLD);
+            MPI_Send(&sendTweetsLn, i, MPI_LONG, rank + 1, 3, MPI_COMM_WORLD);
         }
     }
     
@@ -346,7 +370,7 @@ void parallel(FILE* file, const char* key, int rank, int size) {
 
 void exec(const int rank, const int size, const char* key) {
 
-    FILE* file = fopen(FIN, "r");
+    FILE* file = fopen(FIN, "rb");
     if (file == NULL) handle_error("Cannon open File .\n");
     
     linesToRead = TNUM / size;
@@ -394,13 +418,11 @@ void exec(const int rank, const int size, const char* key) {
         i++;
     }
     
-    
-    
     bitonic(linesToRead);
     
     // Warten bis alle Prozessoren hier sind
     MPI_Barrier(MPI_COMM_WORLD);
-    writeOrderedTweets(TWEETS, linesToRead);
+    writeOrderedTweets(rank, TWEETS, linesToRead);
     
     //parallel(file, key, rank, size);
     
@@ -412,7 +434,7 @@ void exec(const int rank, const int size, const char* key) {
     
     MPI_Barrier(MPI_COMM_WORLD);
     
-    writeOrderedTweets(TWEETS, linesToRead);
+    writeOrderedTweets(rank, TWEETS, linesToRead);
     //printf("---------------\n");
     fclose(file);
     // FREE
@@ -439,7 +461,7 @@ int main(int argc, char** argv) {
     
     exec(rank, size, argv[1]);
     
-    /*TDATA **tweets = allocTweets(300);
+    /*TDATA **tweets = allocTweets(300); 24476
     char line[32] = "hello";
     for(int i = 0; i < 300; i++)
       writeTweet(tweets, i, 2, 3, 4, 5, 6, line, 7);*/
