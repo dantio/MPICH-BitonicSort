@@ -1,5 +1,5 @@
 NAME=tweetonic
-MPICC?=mpicc -std=c99 -Wall
+MPICC?=mpicc -std=c99 -Wall -g
 SRC=${NAME}.c
 OUT=${NAME}.out
 NP=4
@@ -11,6 +11,9 @@ tweetonic: ${NAME}.c
 
 clean:
 	rm ${OUT}
+
+check:
+	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./${OUT} "app"
 
 run1:
 	mpirun -np 1 ./${OUT} "app"
@@ -29,4 +32,5 @@ run16:
 	
 style:
 	astyle --style=google --fill-empty-lines ./${SRC}
+
 	
