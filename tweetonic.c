@@ -244,7 +244,7 @@ void copyTweet(TDATA *t1, TDATA *t2){
     memcpy(t1->tweet, t2->tweet, TSIZE);
 }
 
-void parallel(FILE* file, const char* key, int rank, int size) {
+void parallel(FILE* file, const char* key, int rank, int size, int readedLines) {
 
     if (rank == 0) {
         printf("Number of Processes spawned: %d\n", size);
@@ -255,7 +255,7 @@ void parallel(FILE* file, const char* key, int rank, int size) {
     
     for(int next = 1; next > 0; ) {
     
-        bitonic(linesToRead);
+      //  bitonic(readedLines);
         
         int sender   = (next == 1 && (!isLastProc(rank, size) && (rank == 0 || rank % 2 == 0)))
                        || (next > 1 && (rank < size - next) );
@@ -389,6 +389,8 @@ void parallel(FILE* file, const char* key, int rank, int size) {
         if(down) next++;
         else next--;
         
+        bitonic(readedLines);
+        
         MPI_Barrier(MPI_COMM_WORLD);
     }
     
@@ -445,19 +447,15 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
             iLine++;
         }
         
-        bitonic(linesToRead);
-        //printf("%d \n", TWEETS[256]);
-        
+        bitonic(iLine);
         
         // Warten bis alle Prozessoren hier sind
         MPI_Barrier(MPI_COMM_WORLD);
         //writeOrderedTweets(rank, TWEETS, linesToRead, 1);
         
-        parallel(files[f], key, rank, size);
+        parallel(files[f], key, rank, size, iLine);
         
         MPI_Barrier(MPI_COMM_WORLD);
-        
-
     }        writeOrderedTweets(rank, TWEETS, linesToRead, 3);
         //printf("---------------\n");
         
