@@ -348,7 +348,7 @@ void parallel(FILE* file, const char* key, int rank, int size) {
             // printf("-- %d TWEET\n ", TWEETS[2]->ln);
             
             MPI_Send(sendTweetsLn, j, MPI_LONG, rank - next, 2, MPI_COMM_WORLD);
-            printf("3.RANK %d SEND %d TWEET TO %d\n",rank, j, rank - next);
+            printf("3.RANK %d SEND %d TWEET TO %d\n",rank, j, rank - 1 - next);
             
             // Wieviel will der linke knoten uns schicken?
             MPI_Status status;
