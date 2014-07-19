@@ -234,6 +234,16 @@ TDATA **getTweetFromFile(FILE *file, const char* key,  unsigned int size, long o
     return tweetsFromFile;
 }
 
+void copyTweet(TDATA *t1, TDATA *t2){
+	t1->offset = t2->offset;
+	t1->ln = t2->ln;
+	t1->fn = t2->fn;
+	t1->hits = t2->hits;
+    t1->month = t2->month;
+    t1->day = t2->day;
+    memcpy(t1->tweet, t2->tweet, TSIZE);
+}
+
 void parallel(FILE* file, const char* key, int rank, int size) {
 
     if (rank == 0) {
@@ -360,10 +370,10 @@ void parallel(FILE* file, const char* key, int rank, int size) {
                 
                 // writeOrderedTweets(tweetsFromLeft, j);
                 for(int k = 0; k < tweets; k++) {
-                    //TDATA *freeMee = TWEETS[k];
-                    TWEETS[k] = tweetsFromLeft[k];
-                    //free(freeMee);
+                    copyTweet(TWEETS[k], tweetsFromLeft[k]);
                 }
+                free(tweetsFromLeft[0]);
+                free(tweetsFromLeft);
                 
                 
             } else {
