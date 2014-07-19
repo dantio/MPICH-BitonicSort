@@ -20,7 +20,7 @@ run1:
 	mpirun -np 1 ./${OUT} "app"
 	
 run2: 
-	mpirun -np 2 -f ${HOSTFILE} ./${OUT} "app"
+	mpirun -np 2 ./${OUT} "app"
 	
 run4: 
 	mpirun -np 4 -f ${HOSTFILE} ./${OUT} "app"
