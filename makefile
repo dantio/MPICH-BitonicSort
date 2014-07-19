@@ -7,7 +7,7 @@ NP=4
 all: ${NAME}
 
 tweetonic: ${NAME}.c
-	${MPICC} -o ${OUT} ${SRC}
+	${MPICC} -o  ${OUT} ${SRC} -lm
 
 clean:
 	rm ${OUT}
