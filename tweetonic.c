@@ -6,7 +6,7 @@
  ============================================================================
  */
 
-#include <mpi.h>		// MPI Library
+#include <mpi.h>	// MPI Library
 #include <stdio.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -17,12 +17,12 @@
 #define MAX_LINE_SIZE 1000
 
 // #define TNUM 2400000 // Zeilen
-#define FNUM 16
+#define FNUM 1
 #define TSIZE 24
-#define TNUM 2400000 // Zeilen
+#define TNUM 1024 // Zeilen
 
 //#define FIN "twitter.data1000"
-#define FIN "/mpidata/parsys14/gross/twitter.data.0"
+#define FIN "/mpidata/parsys14/gross/twitter.data.1"
 #define U_MAX_BYTES 4
 
 char* MONTHS[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
@@ -73,20 +73,21 @@ char isPowerOfTwo(unsigned const int number) {
 }
 
 
-void writeOrderedTweets(int rank, TDATA **T, int size) {
-    char buffer[500] = "";
-    char allTweets[5000] = "";
-    sprintf(buffer, "-----  Rank %d ------ \n", rank);
-    strcat(allTweets, buffer);
+void writeOrderedTweets(int rank, TDATA **T, int size, int i) {
+    char fileName[20];
+    sprintf(fileName, "F%dtwitter.ausgabe.%d",i, rank);
+
+    remove(fileName);
+    FILE* fu = fopen(fileName, "a");
+    TDATA *t;
     for (int i = 0; i < size; i++) {
-        TDATA *t = T[i];
-        sprintf(buffer, "%d - %d\n", t->ln, t->hits);
-        strcat(allTweets, buffer);
+        t = T[i];
+        fprintf(fu, "R. %d File: %d - Lines: %d Hits: %d\n",rank,  t->fn, t->ln, t->hits);
     }
-    //allTweets[strlen(allTweets)] = '\0';
-    printf("%s \n", allTweets);
-    
+
+    fclose(fu);
 }
+
 
 void swap(int i, int j) {
     TDATA *t = TWEETS[i];
@@ -97,14 +98,6 @@ void swap(int i, int j) {
 
 int compare(const TDATA *t1, const TDATA *t2) {
 
-
-    // printf("%d %d %d\n", t2, *(&(t2)), (*t2));
-    //printf("%d - %d\n",t1,  t2);
-    if(t2 == NULL) return 0;
-    if(t1 == NULL) return 0;
-    
-    //if(*(t2->tweet) == NULL) return -1;
-    
     if(t1->hits > t2->hits) return -1;
     if(t2->hits > t1->hits) return 1;
     
@@ -166,11 +159,11 @@ unsigned int readMonth(char** lptr) {
     return -1;
 }
 
-int countHits(const char* line, const char* key) {
+unsigned int countHits(const char* line, const char* key) {
     int n = strlen(key);
     int k = strlen(line) - n;
     int i;
-    int hits = 0;
+    unsigned int hits = 0;
     for (i = 0; i < k; i++, line++) {
         if (*line == *key) {
             if (memcmp(line, key, n) == 0)
@@ -195,7 +188,6 @@ void writeTweet(TDATA **T, unsigned int i, const unsigned int fn, const unsigned
     
     for (int k = strlen(line); k < TSIZE; k++) line[k] = ' '; // padding
     memcpy(tweet->tweet, line, TSIZE);
-    
 }
 
 char isLastProc(const int rank, const int size) {
@@ -204,17 +196,15 @@ char isLastProc(const int rank, const int size) {
 
 TDATA **allocTweets(int lines) {
     TDATA **tweets = calloc(lines, sizeof(TDATA*)); // Array of pointers
-    
     TDATA *data = calloc(lines, sizeof(TDATA)); // The data
-    
+
     for (int i = 0; i < lines ; i++) tweets[i] = &(data[i]);
     
     return tweets;
 }
 
 TDATA **getTweetFromFile(FILE *file, const char* key,  unsigned int size, long offset[]) {
-    // TODO
-    // Allocate size
+
     TDATA **tweetsFromFile = allocTweets(size);
     char* line;
     char buf[MAX_LINE_SIZE];
@@ -229,7 +219,6 @@ TDATA **getTweetFromFile(FILE *file, const char* key,  unsigned int size, long o
         
         line = fgets(buf, MAX_LINE_SIZE, file);
         if(line == NULL) handle_error("file is null");
-        //printf("%s", line);
         
         fn = readNumber(&line);
         
@@ -241,7 +230,6 @@ TDATA **getTweetFromFile(FILE *file, const char* key,  unsigned int size, long o
         hits = countHits(line, key);
         
         writeTweet(tweetsFromFile, i, fn, ln, hits, month, day, line, offset[i]);
-        
     }
     
     return tweetsFromFile;
@@ -249,19 +237,22 @@ TDATA **getTweetFromFile(FILE *file, const char* key,  unsigned int size, long o
 
 void parallel(FILE* file, const char* key, int rank, int size) {
 
-    int next = 1;
-    
     if (rank == 0) {
         printf("Number of Processes spawned: %d\n", size);
         timer_start = MPI_Wtime();
     }
 
+    int down = 1;
+
+    for(int next = 1; next > 0; ) {
+   
+    bitonic(linesToRead);
+
     int sender   = (next == 1 && (!isLastProc(rank, size) && (rank == 0 || rank % 2 == 0))) 
-                || (next == 2 && (rank < size - 2) ); 
+                || (next > 1 && (rank < size - next) ); 
  
     int receiver = (next == 1 && ( isLastProc(rank, size) || (rank != 0 && rank % 2 != 0)))
-                || (next == 2 && rank > 1);
- 
+                || (next > 1 && rank > next -1 );
     if(sender) {
         // Sende letzten
         printf("1.RANK %d SEND LAST TWEET TO %d\n",rank, rank + next);
@@ -291,21 +282,20 @@ void parallel(FILE* file, const char* key, int rank, int size) {
             // Platz fuer die Tweets aus dem rechten Knoten
             TDATA **tweetsFromRight = getTweetFromFile(file, key, tweets, sendTweetsLn);
             int j = 0;
-            int k = 0;
-            int g = tweets - 1;
+            int g = 0;
             int h = 0;
             // Welche Tweets sind  besser?
             int i = 0;
-            for(j = linesToRead - 1; j > -1 && i < tweets; j--, i++) {
+            for(j = linesToRead - 1; j > -1 && g < tweets; j--, i++) {
+                //printf("COMPARE %d - %d\n",tweetsFromRight[g]->hits, TWEETS[j]->hits );
                 if(compare(tweetsFromRight[g], TWEETS[j]) == -1) {
-                    g--;
-                    continue;
+                    g++;
                 } else break;
             }
             
             h = linesToRead - i;
             
-            for(; k  < i ; k++, h++) {
+            for(int k = 0; k  < i ; k++, h++) {
                 sendTweetsLn[k] = TWEETS[h]->offset;
                 //TDATA *freeMee = TWEETS[linesToRead - tweets + j];
                 TWEETS[h] = tweetsFromRight[k];
@@ -313,7 +303,7 @@ void parallel(FILE* file, const char* key, int rank, int size) {
                 
             }
             
-            printf("6.RANK %d SEND %d TWEET TO %d\n",rank, k, rank + next);
+            printf("6.RANK %d SEND %d TWEET TO %d\n",rank, i, rank + next);
             
             // Unblocked!
             MPI_Send(&sendTweetsLn, i, MPI_LONG, rank + next, 3, MPI_COMM_WORLD);
@@ -322,7 +312,6 @@ void parallel(FILE* file, const char* key, int rank, int size) {
     
     if(receiver)
     {
-    
         long lastTweetLn[1];
         printf("2.RANK %d GET LAST TWEET FROM %d\n", rank, rank - next);
         MPI_Recv(lastTweetLn, 1, MPI_LONG, rank - next, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -383,16 +372,23 @@ void parallel(FILE* file, const char* key, int rank, int size) {
             MPI_Send(NULL, 0, MPI_LONG, rank - next, 2, MPI_COMM_WORLD);
         }
     }
+    //
 
+    if(next > size / 2 ){
+	down = 0;
+    }
 
+    if(down) next++;
+    else next--;
 
-
-    bitonic(linesToRead);
+    MPI_Barrier(MPI_COMM_WORLD);
+}
     
 }
 
-void exec(const int rank, const int size, const char* key) {
+void exec(const numFiles, const int rank, const int size, const char* key) {
 
+    
     FILE* file = fopen(FIN, "rb");
     if (file == NULL) handle_error("Cannon open File .\n");
     
@@ -448,13 +444,13 @@ void exec(const int rank, const int size, const char* key) {
     
     // Warten bis alle Prozessoren hier sind
     MPI_Barrier(MPI_COMM_WORLD);
-    //writeOrderedTweets(rank, TWEETS, linesToRead);
+    //writeOrderedTweets(rank, TWEETS, linesToRead, 1);
     
     parallel(file, key, rank, size);
    
     MPI_Barrier(MPI_COMM_WORLD);
     
-    //writeOrderedTweets(rank, TWEETS, linesToRead);
+    writeOrderedTweets(rank, TWEETS, linesToRead, 3);
     //printf("---------------\n");
     fclose(file);
     
@@ -482,7 +478,7 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     
     // Execute main programm
-    exec(rank, size, argv[1]);
+    exec(FNUM, rank, size, argv[1]);
     
     
     char processor_name[MPI_MAX_PROCESSOR_NAME]; // Get the name of the processor
