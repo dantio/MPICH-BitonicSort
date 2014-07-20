@@ -15,7 +15,7 @@ clean:
 	rm ${OUT}
 
 check:
-	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./${OUT} "app"
+	valgrind -v --leak-check=full --show-leak-kinds=all --track-origins=yes ./${OUT} "app"
 
 run1:
 	mpirun -np 1 ${HOSTFILE} ./${OUT} "app"

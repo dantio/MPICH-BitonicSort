@@ -428,10 +428,11 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
     FILE *files[FNUM];
 
     char fileName[20];
-    linesToRead = TNUM / size;
+    
+    linesToRead = (TNUM + (size -1 )) / size;
     //printf("Lines %d \n", linesToRead);
     // Allocate size
-    TWEETS = allocTweets(FNUM * linesToRead);
+    TWEETS = allocTweets(FNUM * linesToRead * size);
 	int iLine = 0;
     for(int f = 0; f < FNUM; f++) {
         sprintf(fileName, FIN"%d",f);
@@ -457,6 +458,7 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         unsigned int hits;
         int offset;
         char* line;
+   
        // printf("iLines %d \n", iLine);
         for(int lines = 0; iLine < linesToRead * FNUM && (line = fgets(buf, MAX_LINE_SIZE, files[f])) != NULL; ++lines) {
             if(lines < globalstart) continue;
@@ -477,6 +479,7 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
             
             iLine++;
         }
+        
          
         // 1. Schritt Sortiere Locale Tweets
         //bitonic(iLine);
@@ -492,13 +495,13 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         MPI_Barrier(MPI_COMM_WORLD);
     }        
    
-    bitonicSort(0, linesToRead, ASCENDING);
+    //bitonicSort(0, linesToRead, ASCENDING);
     
-    writeOrderedTweets(rank, TWEETS, linesToRead);
+    //writeOrderedTweets(rank, TWEETS, linesToRead);
     
-    free(TWEETS);
+    //free(TWEETS);
     
-    for(int i = 0; i < FNUM; i++) fclose(files[i]);
+    //for(int i = 0; i < FNUM; i++) fclose(files[i]);
 }
 
 
