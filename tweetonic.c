@@ -547,16 +547,22 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
 }
 
 void printTweetAtRank(int tweetRank, int size) {
-    if(tweetRank < 1) return;
+    int platz;
+    if(tweetRank < 1){
+        platz = TNUM + tweetRank + 1 ;
+        tweetRank = TNUM / size - tweetRank + 1;
+    }
+    else
+    {
+        platz = tweetRank;
+    }
     
     int f = 0;
     
-    if(tweetRank > TNUM / size) {
+    while(tweetRank > (TNUM / size)){
         tweetRank -= TNUM / size;
         f++;
     }
-    printf("F%d %d\n", f, tweetRank);
-    
     char fileName[20];
     sprintf(fileName, FOUT"%d",f);
     
@@ -578,7 +584,9 @@ void printTweetAtRank(int tweetRank, int size) {
             
             for(lines = 0; (line = fgets(buf, MAX_LINE_SIZE, file)) != NULL; lines++) {
                 if(lines  == ln) {
+                    printf("Tweet auf Platz: %d\n===\n", platz);
                     printf(line);
+                    printf("===\n");
                     fclose(file);
                     break;
                 }
@@ -611,7 +619,7 @@ int main(int argc, char** argv) {
     exec(FNUM, rank, size, argv[1]);
     
     if(rank == 0) {
-        printf("Done.  \n");
+        printf("\n Zeitmessung:  \n");
         printf("Rank: %d  - Netto ='%f'; Brutto ='%f'\n",rank, netto_end, brutto_end);
         
         double getTime[size][2];
@@ -622,14 +630,14 @@ int main(int argc, char** argv) {
         for(int i = 1; i < size; i++) {
             printf("Rank: %d  - Netto ='%f'; Brutto ='%f'\n",i, getTime[i][0], getTime[i][1]);
         }
-        printf("------------------\n");
+        printf("\n == Erfolgreich abgeshlossen == \n");
+        printf("Das Suchwort war %s \n", argv[1]);
         int p = -1;
         
         while(1) {
-            printf("Zeige Tweet auf Platz ( '0' to exit, '-1' Get Last ) : \n");
+            printf("Zeige Tweet mit Relevanz ( '0' to exit, '-1' Get Last ) : \n");
             scanf("%d", &p);
             if(p == 0) break;
-            printf("Tweet auf Platz: %d\n", p);
             printTweetAtRank(p, size);
         }
     }
