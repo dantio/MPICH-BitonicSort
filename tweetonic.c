@@ -24,7 +24,8 @@
 #define TSIZE 23
 #define TNUM 40000 // Zeilen
 
-#define FIN "../twitter.data."
+#define FIN  "../twitter.data."
+#define FOUT "twitter.sort."
 //#define FIN "twitter.data."
 //#define FIN "/mpidata/parsys14/gross/twitter.data.1"
 #define U_MAX_BYTES 4
@@ -57,26 +58,6 @@ typedef struct tweets {
 TDATA **TWEETS;
 
 /**
- * UTF-8. Return length of the UTF-8 Character.
-// mask values for bit pattern of first byte in multi-byte
-// UTF-8 sequences:
-// 192 - 110xxxxx - for U+0080 to U+07FF
-// 224 - 1110xxxx - for U+0800 to U+FFFF
-// 240 - 11110xxx - for U+010000 to U+1FFFFF
-static unsigned short mask[] = {192, 224, 240};
-
-int u_getc(char chunk[], unsigned int offset, char bytes[]) {
-    int i = 1;
-    if ((chunk[offset] & mask[0]) == mask[0]) i++; // Ist Char ein UTF-8 zeichen?
-    if ((chunk[offset] & mask[1]) == mask[1]) i++;
-    if ((chunk[offset] & mask[2]) == mask[2]) i++;
-    for(int j = 0; j < i; bytes[j] = chunk[offset + j++]); // Zeichen einlesen
-    bytes[i] = '\0'; // Letztes Byte null setzten
-    return i;
-}
-*/
-
-/**
  * Print error and exit programm
  */
 void handle_error(const char* msg) {
@@ -90,7 +71,7 @@ void handle_error(const char* msg) {
  */
 void writeOrderedTweets(int rank, TDATA **T, int size) {
     char fileName[20];
-    sprintf(fileName, "twitter.sort.%d", rank);
+    sprintf(fileName, FOUT"%d", rank);
     
     remove(fileName);
     FILE* fu = fopen(fileName, "a");
@@ -494,14 +475,15 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         };
         
         char buf[MAX_LINE_SIZE];
-        
+        char* line;
+                
         unsigned int fn;
         unsigned int ln;
         unsigned int month;
         unsigned int day;
         unsigned int hits;
         int offset;
-        char* line;
+
         
         // printf("iLines %d \n", iLine);
         for(int lines = 0; iLine < linesToRead * FNUM && (line = fgets(buf, MAX_LINE_SIZE, files[f])) != NULL; ++lines) {
@@ -550,7 +532,48 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
     for(int i = 0; i < FNUM; i++) fclose(files[i]);
 }
 
-
+void printTweetAtRank(int tweetRank, int size){
+    if(tweetRank < 1) return;
+    
+    int f = 0;
+   
+    if(tweetRank > TNUM / size){ 
+      tweetRank -= TNUM / size;
+      f++;
+    }
+    printf("F%d %d\n", f, tweetRank);
+    
+    char fileName[20];
+    sprintf(fileName, FOUT"%d",f);
+    
+    FILE *sortFile = fopen(fileName, "r");
+    if(sortFile == NULL) handle_error("Error in printTweetAtRank\n");
+    
+    char buf[MAX_LINE_SIZE];
+    char* line;
+    
+    // Read from sort File
+    for(int lines = 0; (line = fgets(buf, MAX_LINE_SIZE, sortFile)) != NULL; ++lines) {
+        if(lines == tweetRank){
+            int fn = fn = readNumber(&line);
+            int ln = readNumber(&line);
+            
+            sprintf(fileName, FIN"%d",fn);
+            FILE *file = fopen(fileName, "r");
+            if(file == NULL) handle_error("Error in printTweetAtRank\n");
+            
+            for(lines = 0; (line = fgets(buf, MAX_LINE_SIZE, file)) != NULL; lines++) {
+                if(lines  == ln){
+                  printf(line);
+                  fclose(file);
+                  break;
+                }
+            }
+            fclose(sortFile);
+            break;   
+        }
+    }
+}
 
 int main(int argc, char** argv) {
     if(argc != 2) {
@@ -573,8 +596,16 @@ int main(int argc, char** argv) {
     exec(FNUM, rank, size, argv[1]);
     
     if(rank == 0){
-    
-    
+      printf("Done. ( '0' to exit, '-1' Get Last ) \n");
+      
+      int p = 0;
+      
+      while(p != -1){
+        printf("Zeige Tweet auf Platz: \n");
+        scanf("%d", &p);
+        printf("Tweet auf Platz: %d\n", p);
+        printTweetAtRank(p, size);
+      }
     }
     
     char processor_name[MPI_MAX_PROCESSOR_NAME]; // Get the name of the processor
