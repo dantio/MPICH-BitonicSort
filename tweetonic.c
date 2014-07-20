@@ -429,7 +429,7 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
 
     char fileName[20];
     
-    linesToRead = (TNUM + (size -1 )) / size;
+    linesToRead = TNUM / size;
     //printf("Lines %d \n", linesToRead);
     // Allocate size
     TWEETS = allocTweets(FNUM * linesToRead * size);
@@ -495,13 +495,13 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         MPI_Barrier(MPI_COMM_WORLD);
     }        
    
-    //bitonicSort(0, linesToRead, ASCENDING);
+    bitonicSort(0, linesToRead, ASCENDING);
     
-    //writeOrderedTweets(rank, TWEETS, linesToRead);
+    writeOrderedTweets(rank, TWEETS, linesToRead);
     
-    //free(TWEETS);
+    free(TWEETS);
     
-    //for(int i = 0; i < FNUM; i++) fclose(files[i]);
+    for(int i = 0; i < FNUM; i++) fclose(files[i]);
 }
 
 
