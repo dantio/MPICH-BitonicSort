@@ -22,7 +22,7 @@
 // #define TNUM 2400000 // Zeilen
 #define FNUM 1 // Anzahl der Dateien
 #define TSIZE 23
-#define TNUM 100 // Zeilen
+#define TNUM 2400000 // Zeilen
 
 #define FIN "twitter.data."
 //#define FIN "/mpidata/parsys14/gross/twitter.data.1"
@@ -31,9 +31,7 @@
 char* MONTHS[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 int linesToRead;
 
-double timer_start;
-double timer_end;
-
+double brutto_start, brutto_end, netto_start, netto_end;
 ///////////////////////////////////////////////////
 // TWEETER STRUCT
 ///////////////////////////////////////////////////
@@ -310,7 +308,6 @@ void copyTweet(TDATA *t1, TDATA *t2) {
 void parallel(FILE* files[], const char* key, int rank, int size, int readedLines) {
     if (rank == 0) {
         printf("Number of Processes spawned: %d\n", size);
-        timer_start = MPI_Wtime();
     }
     
     // First we go down
@@ -386,7 +383,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                 
                 // Unblocked!
                 MPI_Request request;
-                MPI_Isend(&sendData, i * 2, MPI_INT, rank + next, 3, MPI_COMM_WORLD, &request);
+                MPI_Send(&sendData, i * 2, MPI_INT, rank + next, 3, MPI_COMM_WORLD);
             }
         }
         ///////////////////////////////////////////////////
@@ -523,6 +520,7 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         // 1. Schritt Sortiere Locale Tweets
         //bitonic(iLine);
         //qsort(TWEETS, iLine, sizeof(TDATA*), compare);
+        brutto_start = MPI_Wtime();
         bitonicSort(sortStart, iLine, ASCENDING);
         
         // Warten bis alle Prozessoren hier sind
@@ -531,7 +529,7 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         
         // 2. Schritt: Tausche Tweets aus
         parallel(files, key, rank, size, iLine);
-        
+        brutto_end = MPI_Wtime();
         MPI_Barrier(MPI_COMM_WORLD);
     }
     
@@ -548,6 +546,7 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
 
 
 int main(int argc, char** argv) {
+    
     if(argc != 2) {
         fprintf(stderr, "Please specify search key");
         return EXIT_FAILURE;
@@ -555,7 +554,7 @@ int main(int argc, char** argv) {
     
     // Initialize MPI
     MPI_Init(NULL, NULL);
-    
+    netto_start = MPI_Wtime();
     // Get the number of processes
     int size;
     MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -574,6 +573,9 @@ int main(int argc, char** argv) {
     // Print off a hello world message
     // printf("Hello world from processor %s, rank %d out of %d processors\n", processor_name, rank, size);
     // Finalize the MPI environment. No more MPI calls can be made after this
+    netto_end = MPI_Wtime();
+    printf("Netto: %f seconds from Rank %d\n", netto_end-netto_start, rank);
+    printf("Brutto: %f seconds from Rank %d\n", brutto_end-brutto_start, rank);
     MPI_Finalize();
     return EXIT_SUCCESS;
 }
