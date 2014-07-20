@@ -22,7 +22,7 @@
 // #define TNUM 2400000 24125101// Zeilen
 #define FNUM 2 // Anzahl der Dateien
 #define TSIZE 23
-#define TNUM 2400000 // Zeilen
+#define TNUM 40000 // Zeilen
 
 
 #define FIN  "../twitter.data."
@@ -290,10 +290,7 @@ void copyTweet(TDATA *t1, TDATA *t2) {
  * MAIN PARALLEL EXECUTION
  */
 void parallel(FILE* files[], const char* key, int rank, int size, int readedLines) {
-    if (rank == 0) {
-        printf("Number of Processes spawned: %d\n", size);
-    }
-    
+
     // First we go down
     int down = 1;
     for(int next = size > 1; next > 0; ) {
@@ -353,12 +350,15 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                 
                 int h = linesToRead - i; // Iterator goes from bad tweets - tweets that are better
                 int sendData[i][2];
+                
+                brutto_start = MPI_Wtime();
                 // Build bitonic sequenz
                 for(int k = i - 1; k  > -1 ; k--, h++) {
                     sendData[k][0] = TWEETS[h]->fn;
                     sendData[k][1] = TWEETS[h]->offset;
                     copyTweet(TWEETS[h], tweetsFromRight[k]);
                 }
+                brutto_end += MPI_Wtime() - brutto_start;
                 
                 free(tweetsFromRight[0]);
                 free(tweetsFromRight);
@@ -366,8 +366,9 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                 printf("6.RANK %d SEND %d TWEET TO %d\n",rank, i, rank + next);
                 MPI_Send(&sendData, i * 2, MPI_INT, rank + next, 3, MPI_COMM_WORLD);
                 
-                bitonicSort(0, readedLines, ASCENDING); 
-
+                brutto_start = MPI_Wtime();
+                bitonicSort(0, readedLines, ASCENDING);
+                brutto_end += MPI_Wtime() - brutto_start;
             }
         }
         ///////////////////////////////////////////////////
@@ -437,7 +438,9 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
         if(down) next++;
         else next--;
         
+        brutto_start = MPI_Wtime();
         bitonicSort(0, readedLines, ASCENDING);
+        brutto_end += MPI_Wtime() - brutto_start;
         
         MPI_Barrier(MPI_COMM_WORLD);
     }
@@ -450,12 +453,13 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
 void exec(const int numFiles, const int rank, const int size, const char* key) {
     FILE *files[FNUM];
     
-    char fileName[20];    
+    char fileName[20];
     linesToRead = TNUM / size;
-
+    
     // Allocate size
     TWEETS = allocTweets(FNUM * linesToRead * size);
     TDATA *willy = TWEETS[0];
+    netto_start = MPI_Wtime();
     
     int iLine = 0;
     for(int f = 0; f < FNUM; f++) {
@@ -475,14 +479,14 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         
         char buf[MAX_LINE_SIZE];
         char* line;
-                
+        
         unsigned int fn;
         unsigned int ln;
         unsigned int month;
         unsigned int day;
         unsigned int hits;
         int offset;
-
+        
         
         // printf("iLines %d \n", iLine);
         for(int lines = 0; iLine < linesToRead * FNUM && (line = fgets(buf, MAX_LINE_SIZE, files[f])) != NULL; ++lines) {
@@ -509,7 +513,7 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         // 1. Schritt Sortiere Locale Tweets
         brutto_start = MPI_Wtime();
         bitonicSort(sortStart, iLine, ASCENDING);
-        brutto_end = MPI_Wtime();
+        brutto_end = MPI_Wtime() - brutto_start;
         
         // Warten bis alle Prozessoren hier sind
         MPI_Barrier(MPI_COMM_WORLD);
@@ -517,12 +521,14 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         
         // 2. Schritt: Tausche Tweets aus
         parallel(files, key, rank, size, iLine);
-
+        
         MPI_Barrier(MPI_COMM_WORLD);
     }
     
     //qsort(TWEETS, linesToRead, sizeof(TDATA*), compare);
     bitonicSort(0, linesToRead, ASCENDING);
+    
+    netto_end = MPI_Wtime() - netto_start;
     
     // Write tweets to file
     writeOrderedTweets(rank, TWEETS, linesToRead);
@@ -531,16 +537,23 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
     free(TWEETS);
     
     for(int i = 0; i < FNUM; i++) fclose(files[i]);
+    
+    if(rank != 0) {
+        // Send Time to master
+        double sendTime[2] = { netto_end, brutto_end };
+        double buff;
+        MPI_Gather( &sendTime, 2, MPI_DOUBLE, &buff, 1, MPI_DOUBLE, 0,  MPI_COMM_WORLD);
+    }
 }
 
-void printTweetAtRank(int tweetRank, int size){
+void printTweetAtRank(int tweetRank, int size) {
     if(tweetRank < 1) return;
     
     int f = 0;
-   
-    if(tweetRank > TNUM / size){ 
-      tweetRank -= TNUM / size;
-      f++;
+    
+    if(tweetRank > TNUM / size) {
+        tweetRank -= TNUM / size;
+        f++;
     }
     printf("F%d %d\n", f, tweetRank);
     
@@ -555,7 +568,7 @@ void printTweetAtRank(int tweetRank, int size){
     
     // Read from sort File
     for(int lines = 0; (line = fgets(buf, MAX_LINE_SIZE, sortFile)) != NULL; ++lines) {
-        if(lines == tweetRank){
+        if(lines == tweetRank) {
             int fn = fn = readNumber(&line);
             int ln = readNumber(&line);
             
@@ -564,20 +577,20 @@ void printTweetAtRank(int tweetRank, int size){
             if(file == NULL) handle_error("Error in printTweetAtRank\n");
             
             for(lines = 0; (line = fgets(buf, MAX_LINE_SIZE, file)) != NULL; lines++) {
-                if(lines  == ln){
-                  printf(line);
-                  fclose(file);
-                  break;
+                if(lines  == ln) {
+                    printf(line);
+                    fclose(file);
+                    break;
                 }
             }
             fclose(sortFile);
-            break;   
+            break;
         }
     }
 }
 
 int main(int argc, char** argv) {
-    
+
     if(argc != 2) {
         fprintf(stderr, "Please specify search key");
         return EXIT_FAILURE;
@@ -585,7 +598,7 @@ int main(int argc, char** argv) {
     
     // Initialize MPI
     MPI_Init(NULL, NULL);
-    netto_start = MPI_Wtime();
+    
     // Get the number of processes
     int size;
     MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -597,17 +610,28 @@ int main(int argc, char** argv) {
     // Execute main programm
     exec(FNUM, rank, size, argv[1]);
     
-    if(rank == 0){
-      printf("Done. ( '0' to exit, '-1' Get Last ) \n");
-      
-      int p = 0;
-      
-      while(p != -1){
-        printf("Zeige Tweet auf Platz: \n");
-        scanf("%d", &p);
-        printf("Tweet auf Platz: %d\n", p);
-        printTweetAtRank(p, size);
-      }
+    if(rank == 0) {
+        printf("Done.  \n");
+        printf("Rank: %d  - Netto ='%f'; Brutto ='%f'\n",rank, netto_end, brutto_end);
+        
+        double getTime[size][2];
+        double send;
+        
+        MPI_Gather( &send, 1, MPI_DOUBLE, getTime, 2, MPI_DOUBLE, 0,  MPI_COMM_WORLD);
+
+        for(int i = 1; i < size; i++) {
+            printf("Rank: %d  - Netto ='%f'; Brutto ='%f'\n",i, getTime[i][0], getTime[i][1]);
+        }
+        printf("------------------\n");
+        int p = -1;
+        
+        while(1) {
+            printf("Zeige Tweet auf Platz ( '0' to exit, '-1' Get Last ) : \n");
+            scanf("%d", &p);
+            if(p == 0) break;
+            printf("Tweet auf Platz: %d\n", p);
+            printTweetAtRank(p, size);
+        }
     }
     
     char processor_name[MPI_MAX_PROCESSOR_NAME]; // Get the name of the processor
@@ -616,9 +640,7 @@ int main(int argc, char** argv) {
     // Print off a hello world message
     // printf("Hello world from processor %s, rank %d out of %d processors\n", processor_name, rank, size);
     // Finalize the MPI environment. No more MPI calls can be made after this
-    netto_end = MPI_Wtime();
-    printf("Netto: %f seconds from Rank %d\n", netto_end-netto_start, rank);
-    printf("Brutto: %f seconds from Rank %d\n", brutto_end-brutto_start, rank);
+    
     MPI_Finalize();
     return EXIT_SUCCESS;
 }
