@@ -20,7 +20,7 @@
 
 // #define TNUM 2400000 // Zeilen
 #define FNUM 4 // Anzahl der Dateien
-#define TSIZE 24
+#define TSIZE 32
 #define TNUM 1000 // Zeilen
 
 #define FIN "twitter.data."
@@ -75,7 +75,7 @@ char isPowerOfTwo(unsigned const int number) {
 }
 
 
-void writeOrderedTweets(int rank, TDATA **T, int size, int i) {
+void writeOrderedTweets(int rank, TDATA **T, int size) {
     char fileName[20];
     sprintf(fileName, "twitter.sort.%d", rank);
     
@@ -84,7 +84,7 @@ void writeOrderedTweets(int rank, TDATA **T, int size, int i) {
     TDATA *t;
     for (int i = 0; i < size; i++) {
         t = T[i];
-        fprintf(fu, "%d %d - Hits: %d\n", t->fn, t->ln, t->hits);
+        fprintf(fu,  "R:%d FN:%d LN:%d - Hits: %d\n",rank,  t->fn, t->ln, t->hits);
     }
     
     fclose(fu);
@@ -428,9 +428,10 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
     FILE *files[FNUM];
 
     char fileName[20];
-    linesToRead = FNUM * TNUM / size;
+    linesToRead = TNUM / size;
+    //printf("Lines %d \n", linesToRead);
     // Allocate size
-    TWEETS = allocTweets(linesToRead);
+    TWEETS = allocTweets(FNUM * linesToRead);
 	int iLine = 0;
     for(int f = 0; f < FNUM; f++) {
         sprintf(fileName, FIN"%d",f);
@@ -446,7 +447,7 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
             globalend = TNUM;
             linesToRead = TNUM - linesToRead * (size -1);
         };
-        
+
         char buf[MAX_LINE_SIZE];
         
         unsigned int fn;
@@ -456,7 +457,8 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         unsigned int hits;
         int offset;
         char* line;
-        for(int lines = 0; iLine < linesToRead && (line = fgets(buf, MAX_LINE_SIZE, files[f])) != NULL; ++lines) {
+       // printf("iLines %d \n", iLine);
+        for(int lines = 0; iLine < linesToRead * FNUM && (line = fgets(buf, MAX_LINE_SIZE, files[f])) != NULL; ++lines) {
             if(lines < globalstart) continue;
             if(lines > globalend -1) break;
             
@@ -489,10 +491,10 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         
         MPI_Barrier(MPI_COMM_WORLD);
     }        
-    
+   
     bitonicSort(0, linesToRead, ASCENDING);
     
-    writeOrderedTweets(rank, TWEETS, linesToRead, 3);
+    writeOrderedTweets(rank, TWEETS, linesToRead);
     
     free(TWEETS);
     

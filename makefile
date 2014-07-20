@@ -3,7 +3,8 @@ MPICC?=mpicc -std=c99 -Wall -g
 SRC=${NAME}.c
 OUT=${NAME}.out
 NP=4
-HOSTFILE=hostfile
+HOSTFILE=
+XHOSTFILE=-f hostfile
 
 all: ${NAME}
 
@@ -17,19 +18,19 @@ check:
 	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./${OUT} "app"
 
 run1:
-	mpirun -np 1 ./${OUT} "app"
+	mpirun -np 1 ${HOSTFILE} ./${OUT} "app"
 	
 run2: 
-	mpirun -np 2 ./${OUT} "app"
+	mpirun -np 2 ${HOSTFILE}./${OUT} "app"
 	
 run4: 
-	mpirun -np 4 -f ${HOSTFILE} ./${OUT} "app"
+	mpirun -np 4 ${HOSTFILE} ./${OUT} "app"
 	
 run8: 
-	mpirun -np 8 -f ${HOSTFILE} ./${OUT} "app"
+	mpirun -np 8 ${HOSTFILE} ./${OUT} "app"
 	
 run16: 
-	mpirun -np 16 -f ${HOSTFILE} ./${OUT} "app"
+	mpirun -np 16 ${HOSTFILE} ./${OUT} "app"
 	
 style:
 	astyle --style=google --fill-empty-lines ./${SRC}
