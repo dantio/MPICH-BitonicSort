@@ -19,9 +19,9 @@
 #define MAX_LINE_SIZE 1000
 
 // #define TNUM 2400000 // Zeilen
-#define FNUM 1 // Anzahl der Dateien
+#define FNUM 4 // Anzahl der Dateien
 #define TSIZE 24
-#define TNUM 512 // Zeilen
+#define TNUM 1000 // Zeilen
 
 #define FIN "twitter.data."
 //#define FIN "/mpidata/parsys14/gross/twitter.data.1"
@@ -84,7 +84,7 @@ void writeOrderedTweets(int rank, TDATA **T, int size, int i) {
     TDATA *t;
     for (int i = 0; i < size; i++) {
         t = T[i];
-        fprintf(fu, "File: %d - Lines: %d Hits: %d\n", t->fn, t->ln, t->hits);
+        fprintf(fu, "%d %d - Hits: %d\n", t->fn, t->ln, t->hits);
     }
     
     fclose(fu);
@@ -120,15 +120,15 @@ int compare(const TDATA *t1, const TDATA *t2) {
 void bitonicMerge(int lo, int n, int dir) {
 	if ( n > 1) {
 		int m = n / 2;
-            for (int i=lo; i<lo+m; i++) if(compare(TWEETS[i], TWEETS[i + m]) == dir) swap(i, i + m);
+            for (int i=lo; i<lo+m; i++) if(dir == compare(TWEETS[i], TWEETS[i + m])) swap(i, i + m);
             bitonicMerge(lo, m, dir);
-            bitonicMerge(lo+m, m, dir);
+            bitonicMerge(lo + m, m, dir);
     }
 }
 
 void bitonicSort(int lo, int n, int dir) {
 	if (n > 1) {
-		int m= n / 2;
+		int m = n / 2;
         bitonicSort(lo, m, ASCENDING);
         bitonicSort(lo + m, m, DESCENDING);
         bitonicMerge(lo, n, dir);
@@ -250,7 +250,7 @@ TDATA **getTweetFromFile(FILE *files[], const char* key,  unsigned int size, int
         
         hits = countHits(line, key);
         
-        writeTweet(tweetsFromFile[i], fn, ln, hits, month, day, line, data[i][1]);
+        writeTweet(tweetsFromFile[i], data[i][0], ln, hits, month, day, line, data[i][1]);
     }
     
     return tweetsFromFile;
@@ -275,7 +275,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
     
     int down = 1;
     
-    for(int next = 1; next > 0; ) {
+    for(int next = size > 1; next > 0; ) {
     
       //  bitonic(readedLines);
         
@@ -439,6 +439,7 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         
         int globalstart = rank * linesToRead;
         int globalend   = globalstart + linesToRead;
+        int sortStart = iLine;
         
         // Der letzter Prozessor
         if (isLastProc(rank, size)) {
@@ -470,7 +471,7 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
             
             hits = countHits(line, key);
             
-            writeTweet(TWEETS[iLine], fn, ln, hits, month, day, line, offset);
+            writeTweet(TWEETS[iLine], f, ln, hits, month, day, line, offset);
             
             iLine++;
         }
@@ -489,6 +490,7 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         MPI_Barrier(MPI_COMM_WORLD);
     }        
     
+    bitonicSort(0, linesToRead, ASCENDING);
     
     writeOrderedTweets(rank, TWEETS, linesToRead, 3);
     
