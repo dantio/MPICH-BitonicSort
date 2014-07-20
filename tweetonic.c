@@ -13,13 +13,15 @@
 #include <string.h>
 #include <time.h>       // Timer
 
+#define ASCENDING  1
+#define DESCENDING -1
 
 #define MAX_LINE_SIZE 1000
 
 // #define TNUM 2400000 // Zeilen
 #define FNUM 1 // Anzahl der Dateien
 #define TSIZE 24
-#define TNUM 1024 // Zeilen
+#define TNUM 512 // Zeilen
 
 #define FIN "twitter.data."
 //#define FIN "/mpidata/parsys14/gross/twitter.data.1"
@@ -115,6 +117,26 @@ int compare(const TDATA *t1, const TDATA *t2) {
     return 0;
 }
 
+void bitonicMerge(int lo, int n, int dir) {
+	if ( n > 1) {
+		int m = n / 2;
+            for (int i=lo; i<lo+m; i++) if(compare(TWEETS[i], TWEETS[i + m]) == dir) swap(i, i + m);
+            bitonicMerge(lo, m, dir);
+            bitonicMerge(lo+m, m, dir);
+    }
+}
+
+void bitonicSort(int lo, int n, int dir) {
+	if (n > 1) {
+		int m= n / 2;
+        bitonicSort(lo, m, ASCENDING);
+        bitonicSort(lo + m, m, DESCENDING);
+        bitonicMerge(lo, n, dir);
+    }
+}
+
+/**
+BITONIC WITH POWER OF TWO
 void bitonic(unsigned int lines) {
     unsigned int i,j,ij,k,c;
     for (k = 2; k <= lines; k = 2 * k)
@@ -125,7 +147,7 @@ void bitonic(unsigned int lines) {
                         if ((!(i & k) && c == 1) || ( (i & k) && c == -1))
                             swap(i,ij);
 }
-
+*/
 
 void handle_error(const char* msg) {
     MPI_Finalize();
@@ -386,8 +408,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                 MPI_Send(NULL, 0, MPI_INT, rank - next, 2, MPI_COMM_WORLD);
             }
         }
-        //
-        
+
         if(next > size / 2 ) {
             down = 0;
         }
@@ -395,7 +416,8 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
         if(down) next++;
         else next--;
         
-        bitonic(readedLines);
+        //bitonic(readedLines);
+        bitonicSort(0, readedLines, ASCENDING);
         
         MPI_Barrier(MPI_COMM_WORLD);
     }
@@ -452,13 +474,16 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
             
             iLine++;
         }
-        
-        bitonic(iLine);
+         
+        // 1. Schritt Sortiere Locale Tweets
+        //bitonic(iLine);
+        bitonicSort(0, iLine, ASCENDING);
         
         // Warten bis alle Prozessoren hier sind
         MPI_Barrier(MPI_COMM_WORLD);
         //writeOrderedTweets(rank, TWEETS, linesToRead, 1);
         
+        // 2. Schritt: Tausche Tweets aus
         parallel(files, key, rank, size, iLine);
         
         MPI_Barrier(MPI_COMM_WORLD);
