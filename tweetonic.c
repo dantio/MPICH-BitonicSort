@@ -19,12 +19,13 @@
 // Tweets
 #define MAX_LINE_SIZE 1000
 
-// #define TNUM 2400000 // Zeilen
-#define FNUM 1 // Anzahl der Dateien
+// #define TNUM 2400000 24125101// Zeilen
+#define FNUM 2 // Anzahl der Dateien
 #define TSIZE 23
-#define TNUM 100 // Zeilen
+#define TNUM 40000 // Zeilen
 
-#define FIN "twitter.data."
+#define FIN "../twitter.data."
+//#define FIN "twitter.data."
 //#define FIN "/mpidata/parsys14/gross/twitter.data.1"
 #define U_MAX_BYTES 4
 
@@ -96,7 +97,7 @@ void writeOrderedTweets(int rank, TDATA **T, int size) {
     TDATA *t;
     for (int i = 0; i < size; i++) {
         t = T[i];
-        fprintf(fu,  "R:%d FN:%d LN:%d - Hits: %d\n",rank,  t->fn, t->ln, t->hits);
+        fprintf(fu, "%d %d %d\n",t->fn, t->ln, t->hits);
     }
     
     fclose(fu);
@@ -277,6 +278,7 @@ TDATA **getTweetFromFile(FILE *files[], const char* key,  unsigned int size, int
         if(line == NULL) handle_error("file is null");
         
         fn = readNumber(&line);
+        if(fn != data[i][0]) handle_error("Error: getTweetFromFile file number not same.");
         
         ln = readNumber(&line);
         
@@ -372,8 +374,8 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                 
                 int h = linesToRead - i; // Iterator goes from bad tweets - tweets that are better
                 int sendData[i][2];
-                
-                for(int k = 0; k  < i ; k++, h++) {
+                // Build bitonic sequenz
+                for(int k = i - 1; k  > -1 ; k--, h++) {
                     sendData[k][0] = TWEETS[h]->fn;
                     sendData[k][1] = TWEETS[h]->offset;
                     copyTweet(TWEETS[h], tweetsFromRight[k]);
@@ -383,10 +385,9 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                 free(tweetsFromRight);
                 
                 printf("6.RANK %d SEND %d TWEET TO %d\n",rank, i, rank + next);
+                MPI_Send(&sendData, i * 2, MPI_INT, rank + next, 3, MPI_COMM_WORLD);
                 
-                // Unblocked!
-                MPI_Request request;
-                MPI_Isend(&sendData, i * 2, MPI_INT, rank + next, 3, MPI_COMM_WORLD, &request);
+                bitonicSort(0, readedLines, ASCENDING); 
             }
         }
         ///////////////////////////////////////////////////
@@ -425,17 +426,15 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                     handle_error("ERROR: MPI_Get_count TAG 3");
                 }
                 
-                // kopie von nbytes, da es nach MPI_Recv komische zahl hat
                 int tweets = nbytes  / 2;
-                
                 int getData[tweets][2];
+                
                 // Wir bekommenn die anderen Tweets zurueck
                 MPI_Recv(getData, tweets * 2, MPI_INT, rank - next, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                 printf("4.RANK %d GET %d TWEET FROM %d\n",rank, tweets, rank  - next);
                 
                 TDATA **tweetsFromLeft = getTweetFromFile(files, key, tweets, getData);
                 
-                // writeOrderedTweets(tweetsFromLeft, j);
                 for(int k = 0; k < tweets; k++) {
                     copyTweet(TWEETS[k], tweetsFromLeft[k]);
                 }
@@ -444,11 +443,13 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                 free(tweetsFromLeft);
                 
             } else {
-                MPI_Send(NULL, 0, MPI_INT, rank - next, 2, MPI_COMM_WORLD);
+                // Ignore
+                MPI_Request request;
+                MPI_Isend(NULL, 0, MPI_INT, rank - next, 2, MPI_COMM_WORLD, &request);
             }
         }
         
-        if(next > size / 2 ) {
+        if(next > (size / 2) - 1 ) {
             // Go UP!
             down = 0;
         }
@@ -463,15 +464,19 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
     
 }
 
+/**
+ * MAIN EXECUTURE
+ */
 void exec(const int numFiles, const int rank, const int size, const char* key) {
     FILE *files[FNUM];
     
-    char fileName[20];
-    
+    char fileName[20];    
     linesToRead = TNUM / size;
-    //printf("Lines %d \n", linesToRead);
+
     // Allocate size
     TWEETS = allocTweets(FNUM * linesToRead * size);
+    TDATA *willy = TWEETS[0];
+    
     int iLine = 0;
     for(int f = 0; f < FNUM; f++) {
         sprintf(fileName, FIN"%d",f);
@@ -514,15 +519,13 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
             
             hits = countHits(line, key);
             
-            writeTweet(TWEETS[iLine], f, ln, hits, month, day, line, offset);
+            writeTweet(TWEETS[iLine], fn, ln, hits, month, day, line, offset);
             
             iLine++;
         }
         
         
         // 1. Schritt Sortiere Locale Tweets
-        //bitonic(iLine);
-        //qsort(TWEETS, iLine, sizeof(TDATA*), compare);
         bitonicSort(sortStart, iLine, ASCENDING);
         
         // Warten bis alle Prozessoren hier sind
@@ -538,8 +541,10 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
     //qsort(TWEETS, linesToRead, sizeof(TDATA*), compare);
     bitonicSort(0, linesToRead, ASCENDING);
     
+    // Write tweets to file
     writeOrderedTweets(rank, TWEETS, linesToRead);
     
+    free(willy);
     free(TWEETS);
     
     for(int i = 0; i < FNUM; i++) fclose(files[i]);
@@ -567,6 +572,10 @@ int main(int argc, char** argv) {
     // Execute main programm
     exec(FNUM, rank, size, argv[1]);
     
+    if(rank == 0){
+    
+    
+    }
     
     char processor_name[MPI_MAX_PROCESSOR_NAME]; // Get the name of the processor
     int name_len;
