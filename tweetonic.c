@@ -239,12 +239,12 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
             int tweets = nbytes / TSIZE;
             
             printf("5.RANK %d GET %d TWEET FROM %d\n",rank, tweets, rank + next);
-  
+ 
             if(tweets != 0) {
                 char **tweetsFromRight = allocTweets(tweets);
                 
                 MPI_Recv(tweetsFromRight, tweets * TSIZE, MPI_CHAR, rank + next, 2, MPI_COMM_WORLD, &status);
-            
+            printf("OOOOK\n");
                 int j = linesToRead - 1; // Iterator goes from bad to good tweets
                 int g = 0;
                 
@@ -257,7 +257,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                         break;
                     }
                 }
-                
+                 
 
                 printf("6.RANK %d SEND %d TWEET TO %d\n",rank, i, rank + next);
                 MPI_Send(TWEETS, i * TSIZE, MPI_CHAR, rank + next, 3, MPI_COMM_WORLD);
@@ -282,27 +282,31 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
         // Compare Low
         ///////////////////////////////////////////////////
         if(receiver) {
-            char getData[TSIZE];
+            // NO MALLOC PLS
+            char **getData = allocTweets(1);
             printf("2.RANK %d GET LAST TWEET FROM %d\n", rank, rank - next);
-            MPI_Recv(getData, TSIZE, MPI_CHAR, rank - next, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(getData[0], TSIZE, MPI_CHAR, rank - next, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             
             int betterTweets = 0;
              
-            for(int i = 0; betterTweets < linesToRead; i++) {
-                int c = compare( &(TWEETS[i]), &getData );
+            for(int i = 0; i < linesToRead; i++) {
+                int c = compare( &TWEETS[i], &getData[0] );
                 if( c == -1 )
                     betterTweets++;
                 else
                     break;
             }
-           printf("OK %d\n", betterTweets);
+            free(getData[0]);
+            
+
             if(betterTweets > 0) {
                 MPI_Request r;
-                MPI_Isend(TWEETS, betterTweets * TSIZE, MPI_CHAR, rank - next, 2, MPI_COMM_WORLD, &r);
+                MPI_Send(TWEETS[0], betterTweets * TSIZE, MPI_CHAR, rank - next, 2, MPI_COMM_WORLD);
                 printf("3.RANK %d SEND %d TWEET TO %d\n",rank, betterTweets, rank - next);
                 
                 MPI_Status status;
-                int  nbytes = 0;
+                int  nbytes = 0; 
+                
                 MPI_Probe(rank - next, 3, MPI_COMM_WORLD, &status);
                 if(MPI_Get_count(&status, MPI_CHAR, &nbytes) == MPI_UNDEFINED) {
                     handle_error("ERROR: MPI_Get_count TAG 3");
@@ -312,7 +316,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                 char **tweetsFromLeft = allocTweets(tweets);
                 
                 // Wir bekommenn die anderen Tweets zurueck
-                MPI_Recv(getData, tweets * TSIZE, MPI_CHAR, rank - next, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                MPI_Recv(tweetsFromLeft, tweets * TSIZE, MPI_CHAR, rank - next, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                 printf("4.RANK %d GET %d TWEET FROM %d\n",rank, tweets, rank  - next);
 
                 for(int k = 0; k < tweets; k++) {
