@@ -27,7 +27,7 @@
 
 char* MONTHS[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 
-int FNUM = 1;
+int FNUM;
 int linesToRead;
 
 double brutto_start, brutto_end, netto_start, netto_end;
@@ -308,9 +308,10 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
         ///////////////////////////////////////////////////
         if(sender) {
             // Send last (worst) tweet to right
-            printf("1.RANK %d SEND LAST TWEET TO %d\n",rank, rank + next);
+            // printf("1.RANK %d SEND LAST TWEET TO %d\n",rank, rank + next);
             int sendData[2] = { TWEETS[linesToRead - 1]->fn, TWEETS[linesToRead - 1]->offset};
-            MPI_Send(sendData, 2, MPI_INT, rank + next, 0, MPI_COMM_WORLD);
+            MPI_Request r;
+	    MPI_Isend(sendData, 2, MPI_INT, rank + next, 0, MPI_COMM_WORLD, &r);
             
             MPI_Status status;
             int  nbytes = 0;
@@ -322,7 +323,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
             // kopie von nbytes, da es nach MPI_Recv komische zahl hat
             int tweets = nbytes / 2;
             
-            printf("5.RANK %d GET %d TWEET FROM %d\n",rank, tweets, rank + next);
+            //printf("5.RANK %d GET %d TWEET FROM %d\n",rank, tweets, rank + next);
             
             int getData[tweets][2];
             MPI_Recv(getData, tweets * 2, MPI_INT, rank + next, 2, MPI_COMM_WORLD, &status);
@@ -359,7 +360,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                 free(tweetsFromRight[0]);
                 free(tweetsFromRight);
                 
-                printf("6.RANK %d SEND %d TWEET TO %d\n",rank, i, rank + next);
+                //printf("6.RANK %d SEND %d TWEET TO %d\n",rank, i, rank + next);
                 MPI_Send(&sendData, i * 2, MPI_INT, rank + next, 3, MPI_COMM_WORLD);
                 
                 brutto_start = MPI_Wtime();
@@ -372,7 +373,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
         ///////////////////////////////////////////////////
         if(receiver) {
             int getData[1][2];
-            printf("2.RANK %d GET LAST TWEET FROM %d\n", rank, rank - next);
+            //printf("2.RANK %d GET LAST TWEET FROM %d\n", rank, rank - next);
             MPI_Recv(getData, 2, MPI_INT, rank - next, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             
             TDATA **tweetsFromFile = getTweetFromFile(files, key, 1, getData);
@@ -392,9 +393,9 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                     sendData[i][0] = TWEETS[i]->fn;
                     sendData[i][1] = TWEETS[i]->offset;
                 };
-                
-                MPI_Send(sendData, betterTweets * 2, MPI_INT, rank - next, 2, MPI_COMM_WORLD);
-                printf("3.RANK %d SEND %d TWEET TO %d\n",rank, betterTweets, rank - next);
+                MPI_Request r;
+                MPI_Isend(sendData, betterTweets * 2, MPI_INT, rank - next, 2, MPI_COMM_WORLD, &r);
+                //printf("3.RANK %d SEND %d TWEET TO %d\n",rank, betterTweets, rank - next);
                 
                 MPI_Status status;
                 int  nbytes = 0;
@@ -408,7 +409,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                 
                 // Wir bekommenn die anderen Tweets zurueck
                 MPI_Recv(getData, tweets * 2, MPI_INT, rank - next, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                printf("4.RANK %d GET %d TWEET FROM %d\n",rank, tweets, rank  - next);
+                //printf("4.RANK %d GET %d TWEET FROM %d\n",rank, tweets, rank  - next);
                 
                 TDATA **tweetsFromLeft = getTweetFromFile(files, key, tweets, getData);
                 
@@ -426,7 +427,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
             }
         }
         
-        if(next > (size / 2) - 1 ) {
+        if(next > (size / (size / 2)) - 1 ) {
             // Go UP!
             down = 0;
         }
@@ -580,8 +581,8 @@ void printTweetAtRank(int tweetRank, int size) {
             for(lines = 0; (line = fgets(buf, MAX_LINE_SIZE, file)) != NULL; lines++) {
                 if(lines  == ln) {
                     printf("Tweet auf Platz: %d\n===\n", platz);
-                    printf(line);
-                    printf("===\n");
+                    printf("%s ===\n", line);
+                    //print("===\n");
                     fclose(file);
                     break;
                 }
