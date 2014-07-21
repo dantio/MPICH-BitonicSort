@@ -54,7 +54,7 @@ void writeOrderedTweets(int rank, char **tweet, int size) {
     remove(f);
     FILE* fu = fopen(f, "a");
     for (int i = 0; i < size; i++) {
-        fprintf(fu, "%d %d\n", (short) tweet[i][0], (int) tweet[i][2]);
+        fprintf(fu, "%d %d %d\n", (short) tweet[i][0], (int) tweet[i][2],  tweet[i][6]);
     }
     
     fclose(fu);
@@ -75,8 +75,8 @@ static inline void swap(int i, int j) {
  */
 int compare(const void* ptr1, const void* ptr2) {
 	int i;
-	char* t1 = (char*) ptr1;
-	char* t2 = (char*) ptr2;
+	char* t1 = *((char**) ptr1);
+	char* t2 = *((char**) ptr2);
 	for (i=6; i<TSIZE; i++) {
 		if (t1[i] > t2[i]) return -1;
 		if (t2[i] > t1[i]) return 1;
@@ -185,9 +185,9 @@ char isLastProc(const int rank, const int size) {
  */
 char **allocTweets(int lines) {
     char **tweets = calloc(lines, sizeof(char*)); // Array of pointers
-    char *data    = calloc(lines, sizeof(char)); // The data
+    char *data    = calloc(lines, sizeof(char) * TSIZE); // The data
     
-    for (int i = 0; i < lines ; i++) tweets[i] = &(data[i]);
+    for (int i = 0; i < lines ; i++) tweets[i] = data + i * TSIZE;
     
     return tweets;
 }
@@ -402,16 +402,10 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
 
             iLine++;
         }
-                	int i;
-	for (i=0; i<TSIZE; i++) {
-		int k = TWEETS[iLine -1][i];
-		printf("%2x ", k<0?k+256:k);
-	}
-	printf("]\n");
-        
-        
+	
         // sort tweets
         brutto_start = MPI_Wtime();
+        qsort(TWEETS, iLine, sizeof(char*), compare);
         //bitonicSort(sortStart, iLine, ASCENDING);
         brutto_end = MPI_Wtime() - brutto_start;
 
