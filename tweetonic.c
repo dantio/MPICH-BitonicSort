@@ -20,7 +20,7 @@
 #define MAX_LINE_SIZE 1000
 
 #define TSIZE 23
-#define TNUM 2400000 // Zeilen
+#define TNUM 24000000 // Zeilen
 
 #define FIN  "/mpidata/parsys14/gross/twitter.data."
 #define FOUT "twitter.sort."
@@ -234,7 +234,7 @@ TDATA **allocTweets(int lines) {
 /**
  * GET TWEETS FROM FILE BY SPECIFIED FILE NUMBER AND OFFSET
  */
-TDATA **getTweetFromFile(FILE *files[], const char* key,  unsigned int size, int data[][2]) {
+TDATA **getTweetFromFile(FILE *files[], const char* key,  unsigned int size, int data[][2], TDATA *tweet) {
 
     TDATA **tweetsFromFile = allocTweets(size);
     char* line;
@@ -262,8 +262,12 @@ TDATA **getTweetFromFile(FILE *files[], const char* key,  unsigned int size, int
         day = readNumber(&line);
         
         hits = countHits(line, key);
-        
+
         writeTweet(tweetsFromFile[i], data[i][0], ln, hits, month, day, line, data[i][1]);
+
+	if(tweet != NULL){
+		if(compare(tweetsFromFile[i], tweet) == 1) break;
+	}
     }
     
     return tweetsFromFile;
@@ -289,7 +293,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
 
     // First we go down
     int down = 1;
-    for(int next = size > 1; next > 0; ) {
+    for(int next = size > 1; next > 0 && next < size -1; ) {
     
         // Calculate who is sender and receiver
         // 4 Proc - A B C D E F G H
@@ -330,7 +334,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
             
             if(tweets != 0) {
                 // Get Tweets from file
-                TDATA **tweetsFromRight = getTweetFromFile(files, key, tweets, getData);
+                TDATA **tweetsFromRight = getTweetFromFile(files, key, tweets, getData, TWEETS[linesToRead - 1]);
                 
                 int j = linesToRead - 1; // Iterator goes from bad to good tweets
                 int g = 0;
@@ -376,7 +380,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
             //printf("2.RANK %d GET LAST TWEET FROM %d\n", rank, rank - next);
             MPI_Recv(getData, 2, MPI_INT, rank - next, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             
-            TDATA **tweetsFromFile = getTweetFromFile(files, key, 1, getData);
+            TDATA **tweetsFromFile = getTweetFromFile(files, key, 1, getData, NULL);
             int betterTweets = 0;
             for(int i = 0; betterTweets < linesToRead; i++) {
                 int c = compare( TWEETS[i], tweetsFromFile[0] );
@@ -411,7 +415,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                 MPI_Recv(getData, tweets * 2, MPI_INT, rank - next, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                 //printf("4.RANK %d GET %d TWEET FROM %d\n",rank, tweets, rank  - next);
                 
-                TDATA **tweetsFromLeft = getTweetFromFile(files, key, tweets, getData);
+                TDATA **tweetsFromLeft = getTweetFromFile(files, key, tweets, getData, NULL);
                 
                 for(int k = 0; k < tweets; k++) {
                     copyTweet(TWEETS[k], tweetsFromLeft[k]);
@@ -435,11 +439,11 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
         if(down) next++;
         else next--;
         
+	/*
         brutto_start = MPI_Wtime();
         bitonicSort(0, readedLines, ASCENDING);
         brutto_end += MPI_Wtime() - brutto_start;
-        
-        MPI_Barrier(MPI_COMM_WORLD);
+	*/
     }  
 }
 
@@ -506,15 +510,17 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         
         
         // sort tweets
+	
         brutto_start = MPI_Wtime();
         bitonicSort(sortStart, iLine, ASCENDING);
         brutto_end = MPI_Wtime() - brutto_start;
         
         // wait till all proc are finished
-        MPI_Barrier(MPI_COMM_WORLD);
+        //MPI_Barrier(MPI_COMM_WORLD);
         
         // change tweets between procs
         parallel(files, key, rank, size, iLine);
+	if(rank == 0) printf("\nFile %d ready", f);
         
         MPI_Barrier(MPI_COMM_WORLD);
     }
