@@ -259,7 +259,6 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                 }
                 
 
-                
                 printf("6.RANK %d SEND %d TWEET TO %d\n",rank, i, rank + next);
                 MPI_Send(TWEETS, i * TSIZE, MPI_CHAR, rank + next, 3, MPI_COMM_WORLD);
                 
@@ -288,14 +287,15 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
             MPI_Recv(getData, TSIZE, MPI_CHAR, rank - next, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             
             int betterTweets = 0;
+             
             for(int i = 0; betterTweets < linesToRead; i++) {
-                int c = compare( TWEETS[i], getData );
+                int c = compare( &(TWEETS[i]), &getData );
                 if( c == -1 )
                     betterTweets++;
                 else
                     break;
             }
-            printf("OK %d\n", betterTweets);
+           printf("OK %d\n", betterTweets);
             if(betterTweets > 0) {
                 MPI_Request r;
                 MPI_Isend(TWEETS, betterTweets * TSIZE, MPI_CHAR, rank - next, 2, MPI_COMM_WORLD, &r);
@@ -411,10 +411,10 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
 
 	
         // wait till all proc are finished
-        //MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
         
         // change tweets between procs
-        //parallel(files, key, rank, size, iLine);
+        parallel(files, key, rank, size, iLine);
 	if(rank == 0) printf("\nFile %d ready", f);
         
         MPI_Barrier(MPI_COMM_WORLD);
@@ -511,7 +511,7 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     
     if(rank == 0) {
-        printf("Number of process: '%d'\nFiles: '%d'\nKey: '%s'\n=== Start execution", size, FNUM, argv[1]);
+        printf("Number of process: '%d'\nFiles: '%d'\nKey: '%s'\n=== Start execution\n", size, FNUM, argv[1]);
     }
     
     // Execute main programm
