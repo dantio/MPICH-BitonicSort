@@ -20,7 +20,7 @@
 #define MAX_LINE_SIZE 1000
 
 #define TSIZE 32
-#define TNUM 100 //24000000 // Zeilen
+#define TNUM 24000000 //24000000 // Zeilen
 
 #define FIN  "/mpidata/parsys14/gross/twitter.data."
 #define FOUT "twitter.sort."
@@ -47,14 +47,15 @@ void handle_error(const char* msg) {
 /**
  * Write ordered tweet to file
  */
-void writeOrderedTweets(int rank, char **tweet, int size) {
+void writeOrderedTweets(int rank, char **T, int size) {
     char f[20];
     sprintf(f, FOUT"%d", rank);
-    
+    char *tweet;
     remove(f);
     FILE* fu = fopen(f, "a");
     for (int i = 0; i < size; i++) {
-        fprintf(fu, "%d %d %d\n", (short) tweet[i][0], (int) tweet[i][2],  tweet[i][6]);
+        tweet = T[i];
+        fprintf(fu, "%d %d %d\n", *((short*)tweet), *((int*)(tweet + 2)), *(tweet +6));
     }
     
     fclose(fu);
@@ -74,25 +75,30 @@ static inline void swap(int i, int j) {
  * Compare Tweet
  */
 int compare(const void* ptr1, const void* ptr2) {
-	int i;
 	char* t1 = *((char**) ptr1);
 	char* t2 = *((char**) ptr2);
-	for (i=6; i<TSIZE; i++) {
+	for (int i = 6; i < TSIZE; i++) {
 		if (t1[i] > t2[i]) return -1;
 		if (t2[i] > t1[i]) return 1;
 	}
 	return 0;
 }   
 
+static inline int greatestP(int n){
+int k = 1;
+while(k<n) k= k<<1;
+return k>>1;
+}
+
 /**
  * Bitonic sort of non power of two
  */
 void bitonicMerge(int lo, int n, int dir) {
     if ( n > 1) {
-        int m = n / 2;
-        for (int i=lo; i<lo+m; i++) if(dir == compare(&TWEETS[i], &TWEETS[i + m])) swap(i, i + m);
+        int m = greatestP(n);
+        for (int i = lo; i < lo + n - m; i++) if (dir == compare(&TWEETS[i], &TWEETS[i + m])) swap(i, i + m);
         bitonicMerge(lo, m, dir);
-        bitonicMerge(lo + m, m, dir);
+        bitonicMerge(lo + m, n-m, dir);
     }
 }
 
@@ -100,7 +106,7 @@ void bitonicSort(int lo, int n, int dir) {
     if (n > 1) {
         int m = n / 2;
         bitonicSort(lo, m, ASCENDING);
-        bitonicSort(lo + m, m, DESCENDING);
+        bitonicSort(lo + m, n-m, DESCENDING);
         bitonicMerge(lo, n, dir);
     }
 }
@@ -122,23 +128,23 @@ void bitonic(unsigned int lines) {
 /**
  * FROM FORTENBACHER
  */
-unsigned int readNumber(char** lptr) {
-    char* ptr = *lptr;
-    char* line = *lptr;
-    while (*ptr != ' ') ptr++;
-    *ptr = 0;
-    *lptr = ptr+1;
-    return (unsigned int)atoi(line);
+int readNumber(char** lptr) {
+  char* ptr = *lptr;
+  char* line = *lptr;
+  while (*ptr != ' ') ptr++;
+  *ptr = 0;
+  *lptr = ptr+1;
+  return atoi(line);
 }
 
-unsigned int readMonth(char** lptr) {
+int readMonth(char** lptr) {
     char* ptr = *lptr;
     char* line = *lptr;
     while (*ptr != ' ') ptr++;
     *ptr = 0;
     *lptr = ptr+1;
-    unsigned int i;
-    unsigned int m;
+    int i;
+    int m;
     for (i=0, m=1; i<12; i++, m++)
         if (strncmp(line, MONTHS[i], 3) == 0)
             return m;
@@ -147,11 +153,11 @@ unsigned int readMonth(char** lptr) {
     return -1;
 }
 
-unsigned int countHits(const char* line, const char* key) {
+int countHits(const char* line, const char* key) {
     int n = strlen(key);
     int k = strlen(line) - n;
     int i;
-    unsigned int hits = 0;
+    int hits = 0;
     for (i = 0; i < k; i++, line++) {
         if (*line == *key) {
             if (memcmp(line, key, n) == 0)
@@ -161,11 +167,11 @@ unsigned int countHits(const char* line, const char* key) {
     return hits;
 }
 
-void writeTweet(char* tweet, const int fn, const int ln, const int hits,
+void writeTweet(char *tweet, const int fn, const int ln, const int hits,
 		const int month, const int day, char* line) {
   short* ptr1 = (short*) tweet;
   *ptr1 = (short) fn;
-  int* ptr2 = (int*) (tweet+2);
+  int* ptr2 = (int*) (tweet + 2);
   *ptr2 = ln;
   *(tweet+6) = (char) hits;
   *(tweet+7) = (char) month;
@@ -187,7 +193,7 @@ char **allocTweets(int lines) {
     char **tweets = calloc(lines, sizeof(char*)); // Array of pointers
     char *data    = calloc(lines, sizeof(char) * TSIZE); // The data
     
-    for (int i = 0; i < lines ; i++) tweets[i] = data + i * TSIZE;
+    for (int i = 0; i < lines ; i++) tweets[i] = data + (i * TSIZE);
     
     return tweets;
 }
@@ -243,8 +249,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
             if(tweets != 0) {
                 char **tweetsFromRight = allocTweets(tweets);
                 
-                MPI_Recv(tweetsFromRight, tweets * TSIZE, MPI_CHAR, rank + next, 2, MPI_COMM_WORLD, &status);
-            printf("OOOOK\n");
+                MPI_Recv(tweetsFromRight[0], tweets * TSIZE, MPI_CHAR, rank + next, 2, MPI_COMM_WORLD, &status);
                 int j = linesToRead - 1; // Iterator goes from bad to good tweets
                 int g = 0;
                 
@@ -258,7 +263,6 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                     }
                 }
                  
-
                 printf("6.RANK %d SEND %d TWEET TO %d\n",rank, i, rank + next);
                 MPI_Send(TWEETS, i * TSIZE, MPI_CHAR, rank + next, 3, MPI_COMM_WORLD);
                 
@@ -266,7 +270,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                 // Build bitonic sequenz
                 int h = linesToRead - i; // Iterator goes from bad tweets - tweets that are better
                 for(int k = i - 1; k  > -1 ; k--, h++) {
-                    copyTweet(TWEETS[h], tweetsFromRight[k]);
+                   // copyTweet(TWEETS[h], tweetsFromRight[k]);
                 }
                 brutto_end += MPI_Wtime() - brutto_start;
                 
@@ -313,16 +317,14 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                 }
                 
                 int tweets = nbytes  / TSIZE;
-                char **tweetsFromLeft = allocTweets(tweets);
-                
+                char **tweetsFromLeft = allocTweets(tweets);    
                 // Wir bekommenn die anderen Tweets zurueck
-                MPI_Recv(tweetsFromLeft, tweets * TSIZE, MPI_CHAR, rank - next, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                MPI_Recv(tweetsFromLeft[0], tweets * TSIZE, MPI_CHAR, rank - next, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                 printf("4.RANK %d GET %d TWEET FROM %d\n",rank, tweets, rank  - next);
-
-                for(int k = 0; k < tweets; k++) {
-                    copyTweet(TWEETS[k], tweetsFromLeft[k]);
-                }
                 
+                for(int i = 0; i < tweets; i++){
+                    memcpy(TWEETS[i][0], tweetsFromLeft[i], TSIZE);
+                }
                 free(tweetsFromLeft[0]);
                 free(tweetsFromLeft);
                 
@@ -383,11 +385,11 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         char buf[MAX_LINE_SIZE];
         char* line;
         
-        unsigned int fn;
-        unsigned int ln;
-        unsigned int month;
-        unsigned int day;
-        unsigned int hits;
+        int fn;
+        int ln;
+        int month;
+        int day;
+        int hits;
 
         for(int lines = 0; iLine < linesToRead * FNUM && (line = fgets(buf, MAX_LINE_SIZE, files[f])) != NULL; ++lines) {
             if(lines < globalstart) continue;
@@ -409,8 +411,8 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
 	
         // sort tweets
         brutto_start = MPI_Wtime();
-        qsort(TWEETS, iLine, sizeof(char*), compare);
-        //bitonicSort(sortStart, iLine, ASCENDING);
+        //qsort(TWEETS, iLine, sizeof(char*), compare);
+        bitonicSort(sortStart, iLine, ASCENDING);
         brutto_end = MPI_Wtime() - brutto_start;
 
 	
@@ -418,7 +420,9 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
         MPI_Barrier(MPI_COMM_WORLD);
         
         // change tweets between procs
-        parallel(files, key, rank, size, iLine);
+        if(size > 1 )
+          parallel(files, key, rank, size, iLine);
+        
 	if(rank == 0) printf("\nFile %d ready", f);
         
         MPI_Barrier(MPI_COMM_WORLD);
