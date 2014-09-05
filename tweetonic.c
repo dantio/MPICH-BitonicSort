@@ -17,7 +17,7 @@
 // Bitonic sort
 #define ASCENDING  1
 #define DESCENDING -1
-
+    
 // TAGS
 #define WORSTTWEET 0
 #define NUMBEST 1
@@ -137,7 +137,7 @@ void bitonicMerge(int lo, int n, int dir) {
     if ( n > 1) {
         int m = greatestP(n);
         for (int i = lo; i < lo + n - m; i++)
-            if (dir == compare(&TWEETS[i], &TWEETS[i + m]))
+            if (dir == compare(TWEETS[i], TWEETS[i + m]))
                 swap(i, i + m);
                 
         bitonicMerge(lo, m, dir);
@@ -305,7 +305,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                 MPI_STATUS_IGNORE);
                 
             int *better = (int*) numBest;
-#ifdef DEBUGr
+#ifdef DEBUG
             printf("B-Recv: RANK %d GET FROM %d : (%d)\n", rank, rank + next, *better);
 #endif
             
@@ -331,7 +331,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
 
                     if(sendTweets > 0) {
                         MPI_Sendrecv_replace(
-                            TWEETS[readedLines - sendTweets  - 1],
+                            TWEETS[readedLines - sendTweets],
                             sendTweets * TSIZE,
                             MPI_CHAR,
                             rank + next,
@@ -344,7 +344,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                         printf("5. RANK %d SEND WORST AND GET BESt %d TW2EETS TO %d\n", rank, *better,  rank + next);
 #endif
                         brutto_start = MPI_Wtime();
-                        bitonicMerge(sendTweets, readedLines, ASCENDING);
+                        bitonicMerge(0, readedLines, ASCENDING);
                         brutto_end += MPI_Wtime() - brutto_start;  
                         
                     } else {
@@ -354,8 +354,7 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                             MPI_CHAR,
                             rank + next,
                             2,
-                            MPI_COMM_WORLD);
-                            
+                            MPI_COMM_WORLD);   
                     }
             }
         }
@@ -451,11 +450,11 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                         MPI_COMM_WORLD,
                         MPI_STATUS_IGNORE);
 #ifdef DEBUG                        
-                    printf("6. RANK %d GET WORST %d TWEETS FROM %d\n",rank, tweets, rank  - next);
+                    printf("C. RANK %d GET WORST %d TWEETS FROM %d\n",rank, tweets, rank  - next);
 #endif                    
                     MPI_Request r;
                     MPI_Send(
-                        TWEETS[readedLines - tweets],
+                        TWEETS[readedLines - tweets - 1],
                         tweets * TSIZE,
                         MPI_CHAR,
                         rank - next,
@@ -463,15 +462,15 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                         MPI_COMM_WORLD
                     );
 #ifdef DEBUG                    
-                    printf("7. RANK %d SEND BEST %d TWEETS TO %d\n", rank, tweets, rank  - next);
-#endif                    
-
-                    brutto_start = MPI_Wtime();
-                    bitonicMerge(sendTweets, readedLines, ASCENDING);
-                    brutto_end += MPI_Wtime() - brutto_start; 
-                        
+                    printf("D. RANK %d SEND BEST %d TWEETS TO %d\n", rank, tweets, rank  - next);
+#endif                       
                     memcpy(TWEETS[readedLines - tweets], worstTweets, tweets * TSIZE);
                     free(worstTweets);
+                    
+                    brutto_start = MPI_Wtime();
+                    bitonicMerge(0, readedLines, ASCENDING);
+                    brutto_end += MPI_Wtime() - brutto_start; 
+                    
                 }
             }
             
@@ -484,12 +483,6 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
         
         if(down) next++;
         else next--;
-        
-        /*
-            brutto_start = MPI_Wtime();
-            bitonicSort(0, readedLines, ASCENDING);
-            brutto_end += MPI_Wtime() - brutto_start;
-        */
     }
 }
 
@@ -555,7 +548,7 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
             
             hits = countHits(line, key);
             
-            writeTweet(TWEETS[iLine], fn, iLine, hits, month, day, line);
+            writeTweet(TWEETS[iLine], fn, lines, hits, month, day, line);
             
             iLine++; // Global line
             localLine++;
@@ -577,7 +570,7 @@ void exec(const int numFiles, const int rank, const int size, const char* key) {
     // Merge bitonic sequenz
     brutto_start = MPI_Wtime();
     //bitonicMerge(0, linesToRead * FNUM, ASCENDING);
-    qsort(TWEETS[0], linesToRead, TSIZE, compare);
+    //qsort(TWEETS[0], linesToRead, TSIZE, compare);
     brutto_end += MPI_Wtime() - brutto_start;
     
     netto_end = MPI_Wtime() - netto_start;
