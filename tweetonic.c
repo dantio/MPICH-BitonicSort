@@ -29,7 +29,7 @@
 #define MAX_LINE_SIZE 1000
 
 #define TSIZE 32
-#define TNUM 1000 // 24000000 // Zeilen PRO FILE
+#define TNUM 10000000 // 24000000 // Zeilen PRO FILE
 
 //#define FIN  "/mpidata/parsys14/gross/twitter.data."
 #define FIN  "/mpidata/parsys14/gross/twitter.data."
@@ -134,7 +134,7 @@ static inline int greatestP(int n) {
  * Bitonic sort of non power of two
  */
 void bitonicMerge(int lo, int n, int dir) {
-    if ( n > 1) {
+    if (n > 1) {
         int m = greatestP(n);
         for (int i = lo; i < lo + n - m; i++)
             if (dir == compare(TWEETS[i], TWEETS[i + m]))
@@ -341,10 +341,11 @@ void parallel(FILE* files[], const char* key, int rank, int size, int readedLine
                             MPI_COMM_WORLD,
                             MPI_STATUS_IGNORE);
 #ifdef DEBUG                            
-                        printf("5. RANK %d SEND WORST AND GET BESt %d TW2EETS TO %d\n", rank, *better,  rank + next);
+                        printf("5. RANK %d SEND WORST AND GET BEST %d TWEETS TO %d\n", rank, *better,  rank + next);
 #endif
                         brutto_start = MPI_Wtime();
-                        bitonicMerge(0, readedLines, ASCENDING);
+                        bitonicMerge(0, readedLines, 1);
+                        //qsort(TWEETS[0], readedLines, TSIZE, compare);
                         brutto_end += MPI_Wtime() - brutto_start;  
                         
                     } else {
