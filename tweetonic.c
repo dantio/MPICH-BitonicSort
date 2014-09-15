@@ -29,7 +29,7 @@
 #define MAX_LINE_SIZE 1000
 
 #define TSIZE 32
-#define TNUM 10000000 // 24000000 // Zeilen PRO FILE
+#define TNUM 20000000 // 24000000 // Zeilen PRO FILE
 
 //#define FIN  "/mpidata/parsys14/gross/twitter.data."
 #define FIN  "/mpidata/parsys14/gross/twitter.data."
