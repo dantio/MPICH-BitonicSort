@@ -12,7 +12,7 @@
 #include <string.h>     // memcmp
 #include <time.h>       // Timer
 
-//#define DEBUG 1
+#define DEBUG 1
 
 // Bitonic sort
 #define ASCENDING  1
@@ -29,7 +29,7 @@
 #define MAX_LINE_SIZE 1000
 
 #define TSIZE 32
-#define TNUM 240000 // 24000000 // Zeilen PRO FILE
+#define TNUM 24000000 // 24000000 // Zeilen PRO FILE
 
 //#define FIN  "/mpidata/parsys14/gross/twitter.data."
 #define FIN  "/mpidata/parsys14/gross/twitter.data."
@@ -472,12 +472,12 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
     if(numFiles > size)
         startFile = size / numFiles * rank; // 0
     else
-        startFile = ((numFiles * 100 / size) * rank) / 100;
+        startFile = ((numFiles * 1000 / size) * rank) / 1000;
     
     int readFiles = (numFiles + size - 1) / size; // Roundup 2
     
     // Global Lines To Read
-    linesToRead = TNUM * numFiles / size; // 48
+    linesToRead = (TNUM * numFiles / size) - 1; // 48
     
     // Allocate size for tweets
     char *TWEETSDATA[readFiles];
@@ -527,6 +527,7 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
             if(lines < globalstart) continue;
             if(lines > globalend - 1) break;
             
+            //printf("%d ", iLine);
             TWEETS[iLine] = data + (localLine * TSIZE);
             
             fn = readNumber(&line);
@@ -546,12 +547,15 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
         
         // close file
         fclose(file);
-        printf("readFiles %d\n", f);
+       
     }
-    
+
     brutto_start = MPI_Wtime();
     qsort(TWEETS[0], linesToRead, TSIZE, rank == 0 || rank % 2 == 0 ? compare : compareD);
     brutto_end = MPI_Wtime() - brutto_start;
+    printf("rank %d end sorting \n", rank);
+    
+    MPI_Barrier(MPI_COMM_WORLD);
     
     if(size > 1) parallel(key, rank, size, iLine);
     
