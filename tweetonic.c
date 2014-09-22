@@ -12,7 +12,7 @@
 #include <string.h>     // memcmp
 #include <time.h>       // Timer
 
-#define DEBUG 1
+//#define DEBUG 1
 
 // Bitonic sort
 #define ASCENDING  1
@@ -250,11 +250,7 @@ parallel(const char* key, int rank, int size, int readedLines) {
 
     // Step 0 or 1
     // O(n-1)
-    for(int op = 0, step = 0; op < size - 1; op++, step ^= 1) {
-        printf("FOR\n");
-        
-        MPI_Barrier(MPI_COMM_WORLD);
-        
+    for(int op = 0, step = 0; op < size; op++, step ^= 1) {
         // Calculate who is sender and receiver
         int sender =    ((step == 0) && ( rank == 0 || rank % 2 == 0))
                         || (step == 1 && (rank != 0 && rank % 2 != 0 && !isLastProc(rank, size)));
@@ -312,10 +308,10 @@ parallel(const char* key, int rank, int size, int readedLines) {
                     else continue;
                     
                     
-                int sendTweets = (sendTweetsUp + sendTweetsDown + 1) / 2;
+                int sendTweets = (sendTweetsUp + sendTweetsDown + 1) / 2; // Round up
                 
                 if(sendTweets > 0) {
-                
+
                     MPI_Sendrecv_replace(
                         TWEETS[step == 0 ? readedLines - sendTweets : 0],
                         sendTweets * TSIZE,
@@ -406,9 +402,7 @@ parallel(const char* key, int rank, int size, int readedLines) {
 #endif
             
             //------------------------------------------------------------------
-            if(*better == 1) {
-                memcpy(TWEETS[step == 0 ? readedLines - 1 : 0 ], getData, TSIZE);
-            } else if(*better > 1) {
+            if(*better > 0) {
                 MPI_Status status;
                 int  nbytes = 0;
                 
@@ -417,15 +411,13 @@ parallel(const char* key, int rank, int size, int readedLines) {
                     2,
                     MPI_COMM_WORLD,
                     &status);
-                    
+
                 if(MPI_Get_count(&status, MPI_CHAR, &nbytes) == MPI_UNDEFINED)
                     handle_error("ERROR: MPI_Get_count TAG 2");
                     
                 int tweets = nbytes / TSIZE;
-                
-                
+
                 if(tweets > 0) {
-                    printf("TWEETS %d\n", tweets);
                     // Wir bekommenn die anderen Tweets zurueck
                     char *worstTweets = malloc(tweets * TSIZE);
                     if(worstTweets == NULL) handle_error("NO MEMORY FOR WORST TWEETS");
@@ -476,21 +468,26 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
     
     char fileName[20];
     
-    int startFile = rank * numFiles / size;
-    int readFiles = ((numFiles + size - 1) / size); // Roundup
+    int startFile;
+    if(numFiles > size)
+        startFile = size / numFiles * rank; // 0
+    else
+        startFile = ((numFiles * 10 / size) * rank) / 10;
+    
+    int readFiles = (numFiles + size - 1) / size; // Roundup 2
     
     // Global Lines To Read
-    linesToRead = TNUM * readFiles / size;
+    linesToRead = TNUM * numFiles / size; // 48
     
     // Allocate size for tweets
     char *TWEETSDATA[readFiles];
     TWEETS = malloc(linesToRead * sizeof(char*)); // Array of pointers
-    printf("readFiles %d\n", readFiles);
     
     netto_start = MPI_Wtime();
     
     int iLine = 0;
     double startReadFile = MPI_Wtime();
+    
     
     for(int f = startFile, fi = 0; f < readFiles + startFile; f++, fi++) {
     
@@ -502,16 +499,35 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
         char *data = TWEETSDATA[fi];
         if(data == NULL) handle_error("No more memory for TWEETSDATA.\n");
         
-        int globalstart = rank * TNUM / size;
-        int globalend   = globalstart + linesToRead;
-        int sortStart = iLine;
+        int globalstart = 0;
+        int globalend = 0;
         
+        int myrank = -1;
+        if(numFiles >= size){
+           globalstart = 0;
+           globalend = TNUM;
+        } else {
+            if(myrank != f)
+            {
+                globalstart = 0;
+                
+            }
+            else{
+                myrank = f;
+                globalstart = rank * (TNUM / numFiles);
+            }
+            //globalstart = startFile * TNUM / (size / numFiles) ;
+            
+            //globalend   = globalstart + TNUM / (size / numFiles) -1;
+            globalend   = globalstart + TNUM / (size / numFiles) -1;
+        }
         // calc lines to read for last proc
         //if (isLastProc(rank, size)) {
         //    globalend = TNUM;
         //    linesToRead = TNUM - linesToRead * (size -1);
         //};
         
+        printf("RANK %d file %d start %d end %d \n", rank, f,  globalstart, globalend);
         
         char buf[MAX_LINE_SIZE];
         char* line;
@@ -519,11 +535,11 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
         int fn, ln, month, day, hits;
         
         for(int lines = 0, localLine = 0;
-                localLine < linesToRead / readFiles && (line = fgets(buf, MAX_LINE_SIZE, file)) != NULL;
+                lines < globalend && (line = fgets(buf, MAX_LINE_SIZE, file)) != NULL;
                 ++lines) {
                 
             if(lines < globalstart) continue;
-            if(lines > globalend -1) break;
+            if(lines > globalend - 1) break;
             
             TWEETS[iLine] = data + (localLine * TSIZE);
             
@@ -544,6 +560,7 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
         
         // close file
         fclose(file);
+        printf("readFiles %d\n", f);
     }
     
     brutto_start = MPI_Wtime();
@@ -647,8 +664,7 @@ int main(int argc, char** argv) {
     
     // Execute main programm
     exec(numFiles, rank, size, argv[1]);
-    
-    
+
     if(rank == 0) {
         printf("\n Zeitmessung:  \n");
         printf("Rank: %d  - Netto ='%f'; Brutto ='%f'\n",rank, netto_end, brutto_end);
