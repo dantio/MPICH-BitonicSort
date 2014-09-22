@@ -472,7 +472,7 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
     if(numFiles > size)
         startFile = size / numFiles * rank; // 0
     else
-        startFile = ((numFiles * 10 / size) * rank) / 10;
+        startFile = ((numFiles * 100 / size) * rank) / 100;
     
     int readFiles = (numFiles + size - 1) / size; // Roundup 2
     
@@ -488,7 +488,6 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
     int iLine = 0;
     double startReadFile = MPI_Wtime();
     
-    
     for(int f = startFile, fi = 0; f < readFiles + startFile; f++, fi++) {
     
         sprintf(fileName, FIN"%d",f);
@@ -499,26 +498,13 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
         char *data = TWEETSDATA[fi];
         if(data == NULL) handle_error("No more memory for TWEETSDATA.\n");
         
-        int globalstart = 0;
-        int globalend = 0;
-        
-        int myrank = -1;
+        int globalstart;
+        int globalend;
         if(numFiles >= size){
-           globalstart = 0;
-           globalend = TNUM;
+          globalstart = 0;
+          globalend = TNUM;
         } else {
-            if(myrank != f)
-            {
-                globalstart = 0;
-                
-            }
-            else{
-                myrank = f;
-                globalstart = rank * (TNUM / numFiles);
-            }
-            //globalstart = startFile * TNUM / (size / numFiles) ;
-            
-            //globalend   = globalstart + TNUM / (size / numFiles) -1;
+            globalstart = rank * TNUM / (size / numFiles) - (f * TNUM);
             globalend   = globalstart + TNUM / (size / numFiles) -1;
         }
         // calc lines to read for last proc
