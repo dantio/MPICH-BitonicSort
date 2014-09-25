@@ -435,7 +435,7 @@ parallel(const char* key, int rank, int size, int readedLines) {
 #endif
                     MPI_Request r;
                     MPI_Send(
-                        TWEETS[step == 0 ? readedLines - tweets - 1: 0],
+                        TWEETS[step == 0 ? readedLines - tweets: 0],
                         tweets * TSIZE,
                         MPI_CHAR,
                         rank - 1,
