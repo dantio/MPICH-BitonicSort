@@ -211,9 +211,9 @@ countHits(const char* line, const char* key) {
     int k = strlen(line) - n;
     int hits = 0;
     for (int i = 0; i < k; i++, line++) {
-        if (*line == *key && memcmp(line, key, n) == 0) {
+        if (*line == *key && strncmp(line, key, n) == 0) {
             ++hits;
-            i += n;
+           // i += n;
         }
     }
     
@@ -477,7 +477,7 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
     int readFiles = (numFiles + size - 1) / size; // Roundup 2
     
     // Global Lines To Read
-    linesToRead = (TNUM * numFiles / size) - 1; // 48
+    linesToRead = (TNUM * numFiles / size); // 48
     
     // Allocate size for tweets
     char *TWEETSDATA[readFiles];
@@ -505,7 +505,7 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
           globalend = TNUM;
         } else {
             globalstart = rank * TNUM / (size / numFiles) - (f * TNUM);
-            globalend   = globalstart + TNUM / (size / numFiles) -1;
+            globalend   = globalstart + TNUM / (size / numFiles);
         }
         // calc lines to read for last proc
         //if (isLastProc(rank, size)) {
@@ -583,7 +583,8 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
  */
 void printTweetAtRank(int tweetRank, int size) {
     int platz;
-    if(tweetRank < 1) {
+    tweetRank--;
+    if(tweetRank < 0) {
         platz = TNUM + tweetRank + 1 ;
         tweetRank = TNUM / size - tweetRank + 1;
     } else {
@@ -618,7 +619,7 @@ void printTweetAtRank(int tweetRank, int size) {
             
             for(lines = 0; (line = fgets(buf, MAX_LINE_SIZE, file)) != NULL; lines++) {
                 if(lines  == ln) {
-                    printf("Tweet auf Platz: %d\n===\n", platz);
+                    printf("Tweet auf Platz: %d\n===\n", platz + 1);
                     printf("%s ===\n", line);
                     //print("===\n");
                     fclose(file);
