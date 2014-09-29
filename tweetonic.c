@@ -69,12 +69,12 @@ void writeOrderedTweets(int rank, char **T, int size) {
     char *tweet;
     remove(f);
     FILE* fu = fopen(f, "a");
-
-        for (int i = 0; i < size; i++) {
-            tweet = T[i];
-            fprintf(fu, "%d %d %d\n", *((short*)tweet), *((int*)(tweet + 2)), *(tweet +6));
-        }
-
+    
+    for (int i = 0; i < size; i++) {
+        tweet = T[i];
+        fprintf(fu, "%d %d %d\n", *((short*)tweet), *((int*)(tweet + 2)), *(tweet +6));
+    }
+    
     fclose(fu);
 }
 
@@ -200,7 +200,7 @@ countHits(const char* line, const char* key) {
     for (int i = 0; i < k; i++, line++) {
         if (*line == *key && strncmp(line, key, n) == 0) {
             ++hits;
-           // i += n;
+            // i += n;
         }
     }
     
@@ -234,7 +234,6 @@ static inline isLastProc(const int rank, const int size) {
  */
 void
 parallel(const char* key, int rank, int size, int readedLines) {
-
     // Step 0 or 1
     // O(n-1)
     for(int op = 0, step = 0; op < size; op++, step ^= 1) {
@@ -292,7 +291,7 @@ parallel(const char* key, int rank, int size, int readedLines) {
                     else if(*better > 1 && compare(numBest + S_INT + TSIZE, TWEETS[step == 0 ? i: k]) == -1)
                         ++sendTweetsDown;
                     else continue;
-                        
+                    
                 int sendTweets = (sendTweetsUp + sendTweetsDown + 1) / 2; // Round up
                 
                 if(sendTweets > 0) {
@@ -309,10 +308,7 @@ parallel(const char* key, int rank, int size, int readedLines) {
 #ifdef DEBUG
                     printf("C-D. RANK %d SEND RECV %d (%d)\n", rank, rank + 1, sendTweets);
 #endif
-                    
-                    sort_start = MPI_Wtime();
                     bitonicMerge(0, readedLines, step == 0 ? ASCENDING : DESCENDING);
-                    sort_end += MPI_Wtime() - sort_start;
                 } else {
                     MPI_Send(
                         NULL,
@@ -324,7 +320,7 @@ parallel(const char* key, int rank, int size, int readedLines) {
                 }
             }
         }
-
+        
         ///////////////////////////////////////////////////
         // Compare Low
         ///////////////////////////////////////////////////
@@ -394,12 +390,12 @@ parallel(const char* key, int rank, int size, int readedLines) {
                     2,
                     MPI_COMM_WORLD,
                     &status);
-
+                    
                 if(MPI_Get_count(&status, MPI_CHAR, &nbytes) == MPI_UNDEFINED)
                     handle_error("ERROR: MPI_Get_count TAG 2");
                     
                 int tweets = nbytes / TSIZE;
-
+                
                 if(tweets > 0) {
                     // Wir bekommenn die anderen Tweets zurueck
                     char *worstTweets = malloc(tweets * TSIZE);
@@ -416,7 +412,7 @@ parallel(const char* key, int rank, int size, int readedLines) {
 #ifdef DEBUG
                     printf("C. RANK %d GET WORST %d TWEETS FROM %d\n",rank, tweets, rank  - 1);
 #endif
-
+                    
                     MPI_Send(
                         TWEETS[step == 0 ? readedLines - tweets: 0],
                         tweets * TSIZE,
@@ -431,14 +427,14 @@ parallel(const char* key, int rank, int size, int readedLines) {
                     memcpy(TWEETS[step == 0 ? readedLines - tweets: 0], worstTweets, tweets * TSIZE);
                     free(worstTweets);
                     
-                    sort_start = MPI_Wtime();
                     bitonicMerge(0, readedLines, step == 0 ? DESCENDING : ASCENDING);
-                    sort_end += MPI_Wtime() - sort_start;
                 }
             }
             
         }
+        
     }
+
 }
 
 /**
@@ -456,11 +452,11 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
         startFile = size / numFiles * rank;
     else
         startFile = ((numFiles * 1000 / size) * rank) / 1000;
-    
+        
     int readFiles = (numFiles + size - 1) / size; // Roundup 2
     
     // Global Lines To Read
-    linesToRead = (TNUM * numFiles / size); 
+    linesToRead = (TNUM * numFiles / size);
     
     // Allocate size for tweets
     char *TWEETSDATA[readFiles];
@@ -484,15 +480,15 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
         
         int globalstart;
         int globalend;
-        if(numFiles >= size){
-          globalstart = 0;
-          globalend = TNUM;
+        if(numFiles >= size) {
+            globalstart = 0;
+            globalend = TNUM;
         } else {
             globalstart = rank * TNUM / (size / numFiles) - (f * TNUM);
             globalend   = globalstart + TNUM / (size / numFiles);
         }
-
-#ifdef DEBUG        
+        
+#ifdef DEBUG
         printf("RANK %d file %d start %d end %d \n", rank, f,  globalstart, globalend);
 #endif
         
@@ -524,38 +520,38 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
             iLine++; // Global line
             localLine++;
         }
-
-	printf("RANK %d READ FILE %d\n", rank, f);
-        fclose(file);       
+        
+        printf("RANK %d READ FILE %d\n", rank, f);
+        fclose(file);
     }
-
-    preproc = MPI_Wtime() - preproc; 
-
+    
+    preproc = MPI_Wtime() - preproc;
+    
     // Sot ASC or DESC
     sort_start = MPI_Wtime();
     qsort(TWEETS[0], linesToRead, TSIZE, rank == 0 || rank % 2 == 0 ? compare : compareD);
     sort_end = MPI_Wtime() - sort_start;
-
+    
 #ifdef DEBUG
     printf("rank %d end sorting \n", rank);
 #endif
     
     MPI_Barrier(MPI_COMM_WORLD);
     
-    if(size > 1){ 
-      parallel(key, rank, size, iLine); 
-      sort_start = MPI_Wtime();
-      qsort(TWEETS[0], linesToRead, TSIZE, compare);
-      sort_end += MPI_Wtime() - sort_start;
+    if(size > 1) {
+        sort_start = MPI_Wtime();
+        parallel(key, rank, size, iLine);
+        qsort(TWEETS[0], linesToRead, TSIZE, compare);
+        sort_end += MPI_Wtime() - sort_start;
     }
     
     MPI_Barrier(MPI_COMM_WORLD);
-        
+    
     // Write tweets to file
     postproc = MPI_Wtime();
     writeOrderedTweets(rank, TWEETS, linesToRead);
     postproc = MPI_Wtime() - postproc;
-
+    
     total_end = MPI_Wtime() - total_start;
     // Free Space
     for(int i = 0; i < readFiles; i++) free(TWEETSDATA[i]);
@@ -646,7 +642,7 @@ int main(int argc, char** argv) {
     
     // Execute main programm
     exec(numFiles, rank, size, argv[1]);
-
+    
     if(rank == 0) {
         printf("\n Zeitmessung:  \n");
         printf("Rank: %d  - prepoc ='%f'; sort ='%f'; postproc = '%f'; total = '%f' \n", rank, preproc, sort_end, postproc, total_end);
@@ -656,24 +652,24 @@ int main(int argc, char** argv) {
         
         MPI_Gather(&send, 1, MPI_DOUBLE, getTime, 4, MPI_DOUBLE, 0,  MPI_COMM_WORLD);
         
-	double preproc_avg = preproc;
-	double sort_avg = sort_end;
-	double postproc_avg = postproc;
-	double total_avg = total_end;
+        double preproc_avg = preproc;
+        double sort_avg = sort_end;
+        double postproc_avg = postproc;
+        double total_avg = total_end;
         for(int i = 1; i < size; i++) {
             printf("Rank: %d  - prepoc ='%f'; sort ='%f'; postproc = '%f'; total = '%f' \n",i, getTime[i][0], getTime[i][1], getTime[i][2], getTime[i][3]);
-	    preproc_avg += getTime[i][0];
-	    sort_avg += getTime[i][1];
-	    postproc_avg += getTime[i][2];
-	    total_avg += getTime[i][3];        
+            preproc_avg += getTime[i][0];
+            sort_avg += getTime[i][1];
+            postproc_avg += getTime[i][2];
+            total_avg += getTime[i][3];
         }
-	
+        
         printf("\n == Erfolgreich abgeshlossen == \n");
-	printf(" == prepoc = '%f'; == \n", preproc_avg / size);
-	printf(" == sort = '%f'; == \n", sort_avg / size);
-	printf(" == postproc = '%f'; == \n", postproc_avg / size);
-	printf(" == Total = '%f'; == \n\n", total_avg / size);
-
+        printf(" == prepoc = '%f'; == \n", preproc_avg / size);
+        printf(" == sort = '%f'; == \n", sort_avg / size);
+        printf(" == postproc = '%f'; == \n", postproc_avg / size);
+        printf(" == Total = '%f'; == \n\n", total_avg / size);
+        
         printf("Das Suchwort war %s \n", argv[1]);
         int p = -1;
         
