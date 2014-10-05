@@ -2,7 +2,7 @@
  ============================================================================
  Name        : Tweetonic.c
  Author      : Daniil Tomilow s0531603
-               Eric Wündisch
+               Eric Wündisch  s0531521
  ============================================================================
  */
 
@@ -10,31 +10,29 @@
 #include <stdio.h>      // Printf
 #include <stdlib.h>     // calloc, malloc
 #include <string.h>     // memcmp
-#include <time.h>       // Timer
 
+// Uncomment this to see all printf messages
 //#define DEBUG 1
 
 // Bitonic sort
-#define ASCENDING  1
+#define ASCENDING 1
 #define DESCENDING -1
 
-// TAGS
+// MPI TAGS
 #define WORSTTWEET 0
 #define NUMBEST 1
-#define THREE 3
-#define FOUR 4
-#define FIVE 5
 
-// Tweets
-#define MAX_LINE_SIZE 1000
+//Max line size of tweet
+#define MAX_LINE_SIZE 1024
 
 #define TSIZE 32
-#define TNUM 24000000 // 24000000 // Zeilen PRO FILE
+// lines
+#define TNUM 24000000 // 24000000 
 
-//#define FIN  "/mpidata/parsys14/gross/twitter.data."
 #define FIN  "/mpidata/parsys14/gross/twitter.data."
 #define FOUT "twitter.sort."
 
+// size sizeof(int)
 #define S_INT 8
 
 char* MONTHS[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
@@ -59,9 +57,8 @@ handle_error(const char* msg) {
     exit(255);
 }
 
-
 /**
- * Write ordered tweet to file
+ * Write ordered tweet to file.
  */
 void writeOrderedTweets(int rank, char **T, int size) {
     char f[20];
@@ -69,11 +66,16 @@ void writeOrderedTweets(int rank, char **T, int size) {
     char *tweet;
     remove(f);
     FILE* fu = fopen(f, "a");
-    
-    for (int i = 0; i < size; i++) {
-        tweet = T[i];
-        fprintf(fu, "%d %d %d\n", *((short*)tweet), *((int*)(tweet + 2)), *(tweet +6));
-    }
+    if(rank == 0 || rank % 2 == 0)
+      for (int i = 0; i < size; i++) {
+            tweet = T[i];
+            fprintf(fu, "%d %d %d\n", *((short*)tweet), *((int*)(tweet + 2)), *(tweet +6));
+        }
+    else
+      for (int i = size -1; i > -1; i--) {
+            tweet = T[i];
+            fprintf(fu, "%d %d %d\n", *((short*)tweet), *((int*)(tweet + 2)), *(tweet +6));
+        }
     
     fclose(fu);
 }
@@ -81,7 +83,8 @@ void writeOrderedTweets(int rank, char **T, int size) {
 /**
  * Swap Tweet
  */
-static inline void swap(int i, int j) {
+static inline void
+swap(int i, int j) {
     char c[TSIZE];
     memcpy(c, TWEETS[i], TSIZE);
     memcpy(TWEETS[i], TWEETS[j], TSIZE);
@@ -91,11 +94,12 @@ static inline void swap(int i, int j) {
 /**
  * Compare Tweet ACSENDING
  */
-static inline int compare(const void* ptr1, const void* ptr2) {
+static inline int
+compare(const void* ptr1, const void* ptr2) {
     char* t1 = (char*) ptr1;
     char* t2 = (char*) ptr2;
     
-    for (int i = 6; i < TSIZE - 6; i++) {
+    for (int i = 6; i < TSIZE; i++) {
         if (*(t1 + i) > *(t2 + i)) return -1;
         if (*(t2 + i) > *(t1 + i)) return 1;
     }
@@ -106,28 +110,34 @@ static inline int compare(const void* ptr1, const void* ptr2) {
 /**
  * Compare Tweet DESCENDING
  */
-static inline int compareD(const void* ptr1, const void* ptr2) {
+static inline int
+compareD(const void* ptr1, const void* ptr2) {
     char* t1 = (char*) ptr1;
     char* t2 = (char*) ptr2;
     
-    for (int i = 6; i < TSIZE - 6; i++) {
-        if (*(t1 + i) > *(t2 + i)) return   1;
+    for (int i = 6; i < TSIZE; i++) {
+        if (*(t1 + i) > *(t2 + i)) return 1;
         if (*(t2 + i) > *(t1 + i)) return  -1;
     }
     
     return 0;
 }
 
-static inline int greatestP(int n) {
+/**
+ * Return next int of power of two
+ */
+static inline int
+greatestP(int n) {
     int k = 1;
     while(k < n) k <<= 1;
     return k >> 1;
 }
 
 /**
- * Bitonic sort of non power of two
+ * Bitonic-Merge of non power of two
  */
-void bitonicMerge(int lo, int n, int dir) {
+void
+bitonicMerge(int lo, int n, int dir) {
     if (n > 1) {
         int m = greatestP(n);
         for (int i = lo; i < lo + n - m; i++)
@@ -139,7 +149,12 @@ void bitonicMerge(int lo, int n, int dir) {
     }
 }
 
-void bitonicSort(int lo, int n, int dir) {
+/**
+ * Recursiv Bitonic-Sort of non power of two
+ */
+/*
+void
+bitonicSort(int lo, int n, int dir) {
     if (n > 1) {
         int m = n / 2;
         bitonicSort(lo, m, (dir == 1 ? -1 : 1));
@@ -147,10 +162,13 @@ void bitonicSort(int lo, int n, int dir) {
         bitonicMerge(lo, n, dir);
     }
 }
-
+*/
 /**
-BITONIC WITH POWER OF TWO
-void bitonic(unsigned int lines) {
+ * Bitonic-Sort with power of two
+ */
+/*
+void
+bitonic(unsigned int lines) {
     unsigned int i,j,ij,k,c;
     for (k = 2; k <= lines; k = 2 * k)
         for (j = k >> 1; j > 0; j = j >> 1)
@@ -163,7 +181,7 @@ void bitonic(unsigned int lines) {
 */
 
 /**
- * FROM FORTENBACHER
+ * From sort_local.c
  */
 int
 readNumber(char** lptr) {
@@ -197,13 +215,10 @@ countHits(const char* line, const char* key) {
     int n = strlen(key);
     int k = strlen(line) - n;
     int hits = 0;
-    for (int i = 0; i < k; i++, line++) {
-        if (*line == *key && strncmp(line, key, n) == 0) {
-            ++hits;
-            // i += n;
-        }
-    }
-    
+    for (int i = 0; i < k; i++, line++)
+        if (*line == *key && strncmp(line, key, n) == 0)
+            hits++;
+        
     return hits;
 }
 
@@ -227,7 +242,6 @@ char
 static inline isLastProc(const int rank, const int size) {
     return rank != 0 && rank == size -1;
 }
-
 
 /**
  * MAIN PARALLEL EXECUTION
@@ -259,7 +273,6 @@ parallel(const char* key, int rank, int size, int readedLines) {
 #ifdef DEBUG
             printf("A: RANK %d SEND WORST TWEET TO %d\n", rank, rank + 1);
 #endif
-            // See A-Recv ------------------------------------------------------
             
             // A-Recv: NUM, BEST, BEST OF --------------------------------------
             char numBest[S_INT + TSIZE + TSIZE];
@@ -308,6 +321,7 @@ parallel(const char* key, int rank, int size, int readedLines) {
 #ifdef DEBUG
                     printf("C-D. RANK %d SEND RECV %d (%d)\n", rank, rank + 1, sendTweets);
 #endif
+                    qsort(TWEETS[step == 0 ? 0 :readedLines / 2], readedLines / 2, TSIZE, step == 0 ? compareD : compare);
                     bitonicMerge(0, readedLines, step == 0 ? ASCENDING : DESCENDING);
                 } else {
                     MPI_Send(
@@ -426,27 +440,23 @@ parallel(const char* key, int rank, int size, int readedLines) {
 #endif
                     memcpy(TWEETS[step == 0 ? readedLines - tweets: 0], worstTweets, tweets * TSIZE);
                     free(worstTweets);
-                    
+                    // Bitonic-Merge
+                    qsort(TWEETS[step == 0 ? readedLines / 2 : 0], readedLines / 2, TSIZE, step == 0 ? compare : compareD);
                     bitonicMerge(0, readedLines, step == 0 ? DESCENDING : ASCENDING);
                 }
             }
-            
         }
-        
     }
-
 }
 
 /**
- * MAIN EXECUTURE
+ * MAIN EXECUTE
  */
 void
 exec(const int numFiles, const int rank, const int size, const char* key) {
-
     FILE *file;
     
     char fileName[20];
-    
     int startFile;
     if(numFiles > size)
         startFile = size / numFiles * rank;
@@ -467,9 +477,7 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
     int iLine = 0;
     preproc = MPI_Wtime();
     
-    //printf("startFile = %d readFiles = %d \n", startFile, readFiles + startFile );
     for(int f = startFile, fi = 0; f < readFiles + startFile; f++, fi++) {
-    
         sprintf(fileName, FIN"%d",f);
         file = fopen(fileName, "r");
         if (file == NULL) handle_error("Cannon open File .\n");
@@ -505,16 +513,11 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
             if(lines > globalend - 1) break;
             
             TWEETS[iLine] = data + (localLine * TSIZE);
-            
             fn = readNumber(&line);
-            
             ln = readNumber(&line);
-            
             month = readMonth(&line);
             day = readNumber(&line);
-            
             hits = countHits(line, key);
-            
             writeTweet(TWEETS[iLine], fn, ln, hits, month, day, line);
             
             iLine++; // Global line
@@ -541,7 +544,6 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
     if(size > 1) {
         sort_start = MPI_Wtime();
         parallel(key, rank, size, iLine);
-        qsort(TWEETS[0], linesToRead, TSIZE, compare);
         sort_end += MPI_Wtime() - sort_start;
     }
     
@@ -562,13 +564,13 @@ exec(const int numFiles, const int rank, const int size, const char* key) {
         double buff;
         MPI_Gather( &sendTime, 4, MPI_DOUBLE, &buff, 1, MPI_DOUBLE, 0,  MPI_COMM_WORLD);
     }
-    
 }
 
 /**
  * PRINT TWEET BY SPECIFIED RANK
  */
-void printTweetAtRank(int tweetRank, int size) {
+void
+printTweetAtRank(int tweetRank, int size) {
     int platz;
     tweetRank--;
     if(tweetRank < 0) {
@@ -584,6 +586,7 @@ void printTweetAtRank(int tweetRank, int size) {
         tweetRank -= TNUM / size;
         f++;
     }
+    
     char fileName[20];
     sprintf(fileName, FOUT"%d",f);
     

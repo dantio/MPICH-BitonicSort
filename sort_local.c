@@ -14,8 +14,8 @@
 #include <string.h>
 // #include <mpi.h>
 
-#define FIN "/Users/forte/semester/2014s/parsys/data/gross/twitter.data.x"
-#define FOUT "/Users/forte/semester/2014s/parsys/data/gross/twitter.out.x"
+#define FIN "/mpidata/parsys14/gross/twitter.data.0"
+#define FOUT "twitter.sort.0"
 
 #define TSIZE 32
 #define TNUM 24000000
